@@ -23,10 +23,10 @@
         <main class="main-content scroll-y" id="dynamic-view">
             <header class="app-header">
                 <div class="greeting">
+                    <!-- Increased logo size to 44px and used line-height trick for perfect alignment -->
                     <div style="display: flex; align-items: center; gap: 12px;">
-                        <!-- HEADER LOGO -->
-                        <img src="logo.png" alt="Logo" style="width: 32px; height: 32px; border-radius: 8px; object-fit: cover;" onerror="this.style.display='none'">
-                        <h1 id="time-greeting">Good evening</h1>
+                        <img src="logo.png" alt="Logo" style="width: 44px; height: 44px; border-radius: 12px; object-fit: cover; box-shadow: var(--shadow-soft);" onerror="this.style.display='none'">
+                        <h1 id="time-greeting" style="margin: 0; line-height: 44px; font-size: 24px;">Good evening</h1>
                     </div>
                     <div class="header-actions">
                         <button class="icon-btn" id="menu-btn"><i class="fa-solid fa-bars"></i></button>
@@ -203,4 +203,4 @@
     <script src="js/player.js"></script>
     <script src="js/app.js"></script>
 </body>
-                        </html>
+        </html>
