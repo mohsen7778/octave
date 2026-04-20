@@ -783,3 +783,47 @@ body {
     white-space: pre-wrap; 
     padding-bottom: 40px; 
 }
+/* --- BEAUTIFUL FULL PLAYER LAYOUT --- */
+.full-player-overlay {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding-bottom: 40px; /* Gives breathing room for navigation bars */
+}
+
+.fp-art-container {
+    flex: 1;
+    max-height: 40vh; /* Keeps art from pushing controls off-screen */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#fp-art {
+    max-height: 100%;
+    width: auto;
+    border-radius: 12px;
+}
+
+.fp-actions-grid {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 40px;
+}
+
+.fp-actions-grid .icon-btn {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 16px;
+    color: var(--text-secondary);
+}
+
+.fp-progress-section {
+    margin-top: auto;
+    margin-bottom: 10px;
+}
+
+.fp-controls {
+    margin-bottom: 20px;
+}
