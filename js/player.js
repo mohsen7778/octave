@@ -1,17 +1,42 @@
+window.OCTAVE = {
+    queue: [], currentIndex: -1, isPlaying: false,
+    liked: {}, playlists: {}, recentPlayed: [], recentSearches: [],
+    activeTrackForOptions: null
+};
+
+// --- CACHE SYSTEM ---
+function saveCache() {
+    localStorage.setItem('octave_data', JSON.stringify({
+        liked: window.OCTAVE.liked,
+        playlists: window.OCTAVE.playlists,
+        recentPlayed: window.OCTAVE.recentPlayed.slice(0, 30),
+        recentSearches: window.OCTAVE.recentSearches.slice(0, 30),
+        queue: window.OCTAVE.queue,
+        currentIndex: window.OCTAVE.currentIndex
+    }));
+}
+
+function loadCache() {
+    const data = localStorage.getItem('octave_data');
+    if (data) {
+        const parsed = JSON.parse(data);
+        window.OCTAVE.liked = parsed.liked || {};
+        window.OCTAVE.playlists = parsed.playlists || {};
+        window.OCTAVE.recentPlayed = parsed.recentPlayed || [];
+        window.OCTAVE.recentSearches = parsed.recentSearches || [];
+        window.OCTAVE.queue = parsed.queue || [];
+        window.OCTAVE.currentIndex = parsed.currentIndex || -1;
+    }
+}
+loadCache();
+
 const INVIDIOUS = [
-    'https://inv.nadeko.net',
-    'https://invidious.privacyredirect.com',
-    'https://invidious.nerdvpn.de',
-    'https://iv.melmac.space',
-    'https://invidious.io.lol',
-    'https://yt.cdaut.de'
+    'https://inv.nadeko.net', 'https://invidious.privacyredirect.com',
+    'https://invidious.nerdvpn.de', 'https://iv.melmac.space', 'https://invidious.io.lol'
 ];
 let invIdx = 0;
-
-const S = { queue: [], currentIndex: -1, isPlaying: false, volume: 100 };
 let YTP = null, ytReady = false, progressTimer = null;
 
-// 1. Inject YouTube iFrame API
 const script = document.createElement('script');
 script.src = 'https://www.youtube.com/iframe_api';
 document.head.appendChild(script);
@@ -26,74 +51,58 @@ window.onYouTubeIframeAPIReady = () => {
         height: '1', width: '1',
         playerVars: { autoplay: 0, controls: 0, playsinline: 1 },
         events: {
-            onReady: e => { ytReady = true; e.target.setVolume(S.volume); },
+            onReady: e => { 
+                ytReady = true; 
+                e.target.setVolume(100);
+                // Restore last played track visually
+                if (window.OCTAVE.currentIndex >= 0 && window.OCTAVE.queue.length > 0) {
+                    updatePlayerUI(window.OCTAVE.queue[window.OCTAVE.currentIndex]);
+                }
+            },
             onStateChange: onYTS
         }
     });
 };
 
 function onYTS(e) {
-    const miniIcon = document.querySelector('.play-btn-mini i');
-    const fullIcon = document.querySelector('#fp-play i');
-    
     if (e.data === YT.PlayerState.PLAYING) {
-        S.isPlaying = true;
-        if(miniIcon) miniIcon.className = 'fa-solid fa-pause';
-        if(fullIcon) fullIcon.className = 'fa-solid fa-pause';
+        window.OCTAVE.isPlaying = true;
+        updatePlayIcons('fa-solid fa-pause');
         startProgressTracking();
-    } else if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) {
-        S.isPlaying = false;
-        if(miniIcon) miniIcon.className = 'fa-solid fa-play';
-        if(fullIcon) fullIcon.className = 'fa-solid fa-play';
+    } else if (e.data === YT.PlayerState.PAUSED) {
+        window.OCTAVE.isPlaying = false;
+        updatePlayIcons('fa-solid fa-play');
         clearInterval(progressTimer);
+    } else if (e.data === YT.PlayerState.ENDED) {
+        window.OCTAVE.isPlaying = false;
+        playNextLogic();
     }
 }
 
-// 2. Playback Controls
-function togglePlay() {
-    if (!YTP || S.currentIndex === -1) return;
-    S.isPlaying ? YTP.pauseVideo() : YTP.playVideo();
+function updatePlayIcons(iconClass) {
+    const mini = document.querySelector('.play-btn-mini i');
+    const fp = document.querySelector('#fp-play i');
+    if (mini) mini.className = iconClass;
+    if (fp) fp.className = iconClass;
 }
 
-document.querySelector('.play-btn-mini').addEventListener('click', (e) => {
-    e.stopPropagation(); // Prevents opening the full player when just pausing
-    togglePlay();
-});
+window.togglePlay = () => {
+    if (!YTP || window.OCTAVE.currentIndex === -1) return;
+    window.OCTAVE.isPlaying ? YTP.pauseVideo() : YTP.playVideo();
+};
 
-const fpPlayBtn = document.getElementById('fp-play');
-if(fpPlayBtn) fpPlayBtn.addEventListener('click', togglePlay);
-
-// Open/Close Full Player
-document.querySelector('.mini-inner').addEventListener('click', () => {
-    const fp = document.getElementById('full-player');
-    if(fp) fp.classList.add('active');
-});
-
-const closeFpBtn = document.getElementById('close-fp');
-if(closeFpBtn) {
-    closeFpBtn.addEventListener('click', () => {
-        document.getElementById('full-player').classList.remove('active');
-    });
-}
-
-// Sync Progress Bars
 function startProgressTracking() {
     clearInterval(progressTimer);
     progressTimer = setInterval(() => {
-        if (YTP && S.isPlaying) {
+        if (YTP && window.OCTAVE.isPlaying) {
             const current = YTP.getCurrentTime();
             const total = YTP.getDuration();
             if (total > 0) {
                 const percent = (current / total) * 100;
-                const miniProg = document.getElementById('mini-progress');
-                const fpProg = document.getElementById('fp-progress-fill');
-                if (miniProg) miniProg.style.width = `${percent}%`;
-                if (fpProg) fpProg.style.width = `${percent}%`;
-                
-                const currTime = document.getElementById('fp-time-current');
-                const totTime = document.getElementById('fp-time-total');
-                if (currTime) currTime.textContent = formatTime(current);
-                if (totTime) totTime.textContent = formatTime(total);
+                document.getElementById('mini-progress').style.width = `${percent}%`;
+                document.getElementById('fp-progress-fill').style.width = `${percent}%`;
+                document.getElementById('fp-time-current').textContent = formatTime(current);
+                document.getElementById('fp-time-total').textContent = formatTime(total);
             }
         }
     }, 500);
@@ -106,52 +115,131 @@ function formatTime(seconds) {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
 }
 
-// 3. Load Track Logic & Background Media Session
-window.playTrack = (track) => {
-    S.queue.push(track);
-    S.currentIndex = S.queue.length - 1;
+window.playTrackByIndex = (index) => {
+    if (index < 0 || index >= window.OCTAVE.queue.length) return;
+    window.OCTAVE.currentIndex = index;
+    const track = window.OCTAVE.queue[index];
     
-    // Update Mini UI
-    const miniTitle = document.querySelector('.mini-title');
-    const miniArtist = document.querySelector('.mini-artist');
-    const miniArt = document.querySelector('.mini-art');
-    if(miniTitle) miniTitle.textContent = track.title;
-    if(miniArtist) miniArtist.textContent = track.author;
-    if(miniArt) {
-        miniArt.style.backgroundImage = `url(${track.thumb})`;
-        miniArt.style.backgroundSize = 'cover';
-    }
+    // Add to Recent Played
+    window.OCTAVE.recentPlayed = [track, ...window.OCTAVE.recentPlayed.filter(t => t.videoId !== track.videoId)];
+    saveCache();
     
-    // Update Full Player UI
-    const fpTitle = document.getElementById('fp-title');
-    const fpArtist = document.getElementById('fp-artist');
-    const fpArt = document.getElementById('fp-art');
-    if(fpTitle) fpTitle.textContent = track.title;
-    if(fpArtist) fpArtist.textContent = track.author;
-    if(fpArt) {
-        fpArt.src = track.thumb;
-        fpArt.style.display = 'block';
-    }
-    
-    // Load Engine
-    if (ytReady && YTP) {
-        YTP.loadVideoById({ videoId: track.videoId });
-    }
+    updatePlayerUI(track);
+    if (ytReady && YTP) YTP.loadVideoById({ videoId: track.videoId });
 
-    // Enable Lock Screen / Background Play
     if ('mediaSession' in navigator) {
         navigator.mediaSession.metadata = new MediaMetadata({
-            title: track.title,
-            artist: track.author,
-            album: 'Octave',
+            title: track.title, artist: track.author,
             artwork: [{ src: track.thumb, sizes: '512x512', type: 'image/jpeg' }]
         });
         navigator.mediaSession.setActionHandler('play', () => YTP.playVideo());
         navigator.mediaSession.setActionHandler('pause', () => YTP.pauseVideo());
+        navigator.mediaSession.setActionHandler('nexttrack', playNextLogic);
+        navigator.mediaSession.setActionHandler('previoustrack', window.playPrev);
     }
 };
 
-// 4. Search API
+window.playTrack = (track) => {
+    // Add to search history if played directly
+    window.OCTAVE.recentSearches = [track, ...window.OCTAVE.recentSearches.filter(t => t.videoId !== track.videoId)];
+    
+    const existIdx = window.OCTAVE.queue.findIndex(t => t.videoId === track.videoId);
+    if (existIdx >= 0) {
+        window.playTrackByIndex(existIdx);
+    } else {
+        window.OCTAVE.queue.push(track);
+        window.playTrackByIndex(window.OCTAVE.queue.length - 1);
+    }
+};
+
+window.playPrev = () => {
+    if (YTP && YTP.getCurrentTime() > 3) {
+        YTP.seekTo(0);
+    } else if (window.OCTAVE.currentIndex > 0) {
+        window.playTrackByIndex(window.OCTAVE.currentIndex - 1);
+    }
+};
+
+// HEAVY DUTY ALGORITHM
+async function playNextLogic() {
+    if (window.OCTAVE.currentIndex < window.OCTAVE.queue.length - 1) {
+        window.playTrackByIndex(window.OCTAVE.currentIndex + 1);
+    } else {
+        // Algorithm: Fetch recommended based on current track
+        const currentTrack = window.OCTAVE.queue[window.OCTAVE.currentIndex];
+        if (!currentTrack) return;
+        
+        for (let i = 0; i < INVIDIOUS.length; i++) {
+            const base = INVIDIOUS[(invIdx + i) % INVIDIOUS.length];
+            try {
+                const r = await fetch(`${base}/api/v1/videos/${currentTrack.videoId}?fields=recommendedVideos`, { signal: AbortSignal.timeout(5000) });
+                if (r.ok) {
+                    const d = await r.json();
+                    if (d.recommendedVideos && d.recommendedVideos.length > 0) {
+                        const rec = d.recommendedVideos[0];
+                        const nextTrack = {
+                            videoId: rec.videoId,
+                            title: rec.title,
+                            author: rec.author,
+                            thumb: (rec.videoThumbnails && rec.videoThumbnails.length > 0) ? rec.videoThumbnails[0].url : ''
+                        };
+                        window.OCTAVE.queue.push(nextTrack);
+                        window.playTrackByIndex(window.OCTAVE.queue.length - 1);
+                        return;
+                    }
+                }
+            } catch(e) { continue; }
+        }
+    }
+}
+window.playNext = playNextLogic;
+
+function updatePlayerUI(track) {
+    document.getElementById('mini-title-el').textContent = track.title;
+    document.getElementById('mini-artist-el').textContent = track.author;
+    document.getElementById('mini-art-el').style.backgroundImage = `url(${track.thumb})`;
+    document.getElementById('mini-art-el').style.backgroundSize = 'cover';
+    
+    document.getElementById('fp-title').textContent = track.title;
+    document.getElementById('fp-artist').textContent = track.author;
+    const fpArt = document.getElementById('fp-art');
+    fpArt.src = track.thumb;
+    fpArt.style.display = 'block';
+
+    const isLiked = !!window.OCTAVE.liked[track.videoId];
+    document.getElementById('mini-like-btn').innerHTML = isLiked ? '<i class="fa-solid fa-heart" style="color:var(--accent);"></i>' : '<i class="fa-regular fa-heart"></i>';
+    document.getElementById('fp-like').innerHTML = isLiked ? '<i class="fa-solid fa-heart" style="color:var(--accent);"></i>' : '<i class="fa-regular fa-heart"></i>';
+    
+    // Refresh Home grids if active
+    if(window.renderHome) window.renderHome();
+}
+
+window.toggleLike = (track) => {
+    if (window.OCTAVE.liked[track.videoId]) {
+        delete window.OCTAVE.liked[track.videoId];
+    } else {
+        window.OCTAVE.liked[track.videoId] = track;
+    }
+    saveCache();
+    updatePlayerUI(track);
+    if(window.renderHome) window.renderHome();
+};
+
+// Contextual Actions UI Binding
+document.querySelector('.play-btn-mini').addEventListener('click', (e) => { e.stopPropagation(); window.togglePlay(); });
+document.getElementById('fp-play').addEventListener('click', window.togglePlay);
+document.getElementById('fp-next').addEventListener('click', playNextLogic);
+document.getElementById('fp-prev').addEventListener('click', window.playPrev);
+
+document.getElementById('mini-like-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    if(window.OCTAVE.currentIndex >= 0) window.toggleLike(window.OCTAVE.queue[window.OCTAVE.currentIndex]);
+});
+document.getElementById('fp-like').addEventListener('click', () => {
+    if(window.OCTAVE.currentIndex >= 0) window.toggleLike(window.OCTAVE.queue[window.OCTAVE.currentIndex]);
+});
+
+// Search Engine API
 window.performSearch = async (query) => {
     for (let i = 0; i < INVIDIOUS.length; i++) {
         const base = INVIDIOUS[(invIdx + i) % INVIDIOUS.length];
