@@ -256,3 +256,42 @@ window.performSearch = async (query) => {
     }
     return [];
 };
+// --- TRACK SEEKING LOGIC ---
+function seekToPosition(e, containerElement) {
+    if (!YTP || window.OCTAVE.currentIndex === -1) return;
+    
+    // Calculate where the user clicked relative to the width of the bar
+    const rect = containerElement.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const percentage = Math.max(0, Math.min(1, clickX / rect.width));
+    
+    // Get total duration and calculate the new time
+    const totalTime = YTP.getDuration();
+    if (totalTime > 0) {
+        const seekTime = totalTime * percentage;
+        YTP.seekTo(seekTime, true);
+        
+        // Instantly update UI for smooth feeling
+        document.getElementById('fp-progress-fill').style.width = `${percentage * 100}%`;
+        document.getElementById('mini-progress').style.width = `${percentage * 100}%`;
+    }
+}
+
+// Bind to Full Player progress bar
+const fpProgressContainer = document.getElementById('fp-progress-container');
+if (fpProgressContainer) {
+    fpProgressContainer.addEventListener('click', (e) => seekToPosition(e, fpProgressContainer));
+}
+
+// Make the very top edge of the mini-player clickable for seeking too
+const miniPlayerPanel = document.querySelector('.mini-player');
+if (miniPlayerPanel) {
+    miniPlayerPanel.addEventListener('click', (e) => {
+        // Only trigger seek if they click the top 10 pixels (where the bar is)
+        const rect = miniPlayerPanel.getBoundingClientRect();
+        if (e.clientY - rect.top <= 10) {
+            e.stopPropagation(); // Stop the full player from opening
+            seekToPosition(e, miniPlayerPanel);
+        }
+    });
+}
