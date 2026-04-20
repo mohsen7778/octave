@@ -1,6 +1,7 @@
 window.OCTAVE = {
     queue: [], currentIndex: -1, isPlaying: false,
     liked: {}, playlists: {}, recentPlayed: [], recentSearches: [],
+    playStats: {}, // NEW: Tracks how many times every song is played
     activeTrackForOptions: null
 };
 
@@ -11,6 +12,7 @@ function saveCache() {
         playlists: window.OCTAVE.playlists,
         recentPlayed: window.OCTAVE.recentPlayed.slice(0, 30),
         recentSearches: window.OCTAVE.recentSearches.slice(0, 30),
+        playStats: window.OCTAVE.playStats, // Save stats
         queue: window.OCTAVE.queue,
         currentIndex: window.OCTAVE.currentIndex
     }));
@@ -24,6 +26,7 @@ function loadCache() {
         window.OCTAVE.playlists = parsed.playlists || {};
         window.OCTAVE.recentPlayed = parsed.recentPlayed || [];
         window.OCTAVE.recentSearches = parsed.recentSearches || [];
+        window.OCTAVE.playStats = parsed.playStats || {};
         window.OCTAVE.queue = parsed.queue || [];
         window.OCTAVE.currentIndex = parsed.currentIndex || -1;
     }
@@ -54,7 +57,6 @@ window.onYouTubeIframeAPIReady = () => {
             onReady: e => { 
                 ytReady = true; 
                 e.target.setVolume(100);
-                // Restore last played track visually
                 if (window.OCTAVE.currentIndex >= 0 && window.OCTAVE.queue.length > 0) {
                     updatePlayerUI(window.OCTAVE.queue[window.OCTAVE.currentIndex]);
                 }
@@ -120,7 +122,9 @@ window.playTrackByIndex = (index) => {
     window.OCTAVE.currentIndex = index;
     const track = window.OCTAVE.queue[index];
     
-    // Add to Recent Played
+    // Track stats for the Heavy Duty Algorithm
+    window.OCTAVE.playStats[track.videoId] = (window.OCTAVE.playStats[track.videoId] || 0) + 1;
+    
     window.OCTAVE.recentPlayed = [track, ...window.OCTAVE.recentPlayed.filter(t => t.videoId !== track.videoId)];
     saveCache();
     
@@ -140,7 +144,6 @@ window.playTrackByIndex = (index) => {
 };
 
 window.playTrack = (track) => {
-    // Add to search history if played directly
     window.OCTAVE.recentSearches = [track, ...window.OCTAVE.recentSearches.filter(t => t.videoId !== track.videoId)];
     
     const existIdx = window.OCTAVE.queue.findIndex(t => t.videoId === track.videoId);
@@ -160,12 +163,10 @@ window.playPrev = () => {
     }
 };
 
-// HEAVY DUTY ALGORITHM
 async function playNextLogic() {
     if (window.OCTAVE.currentIndex < window.OCTAVE.queue.length - 1) {
         window.playTrackByIndex(window.OCTAVE.currentIndex + 1);
     } else {
-        // Algorithm: Fetch recommended based on current track
         const currentTrack = window.OCTAVE.queue[window.OCTAVE.currentIndex];
         if (!currentTrack) return;
         
@@ -178,9 +179,7 @@ async function playNextLogic() {
                     if (d.recommendedVideos && d.recommendedVideos.length > 0) {
                         const rec = d.recommendedVideos[0];
                         const nextTrack = {
-                            videoId: rec.videoId,
-                            title: rec.title,
-                            author: rec.author,
+                            videoId: rec.videoId, title: rec.title, author: rec.author,
                             thumb: (rec.videoThumbnails && rec.videoThumbnails.length > 0) ? rec.videoThumbnails[0].url : ''
                         };
                         window.OCTAVE.queue.push(nextTrack);
@@ -194,6 +193,42 @@ async function playNextLogic() {
 }
 window.playNext = playNextLogic;
 
+// --- PLAYLIST LOGIC & SMART SHUFFLE ALGORITHM ---
+window.playPlaylist = (plName) => {
+    const pl = window.OCTAVE.playlists[plName];
+    if (pl && pl.length > 0) {
+        window.OCTAVE.queue = [...pl];
+        window.playTrackByIndex(0);
+    }
+};
+
+window.smartShufflePlaylist = (plName) => {
+    const pl = window.OCTAVE.playlists[plName];
+    if (pl && pl.length > 0) {
+        // Sorts by historical play count (most played first)
+        let sorted = [...pl].sort((a, b) => {
+            const countA = window.OCTAVE.playStats[a.videoId] || 0;
+            const countB = window.OCTAVE.playStats[b.videoId] || 0;
+            if (countB !== countA) return countB - countA;
+            return 0.5 - Math.random(); // Shuffles ties
+        });
+        window.OCTAVE.queue = sorted;
+        window.playTrackByIndex(0);
+    }
+};
+
+window.removeFromPlaylist = (plName, index) => {
+    window.OCTAVE.playlists[plName].splice(index, 1);
+    saveCache();
+    if(window.renderPlaylistDetail) window.renderPlaylistDetail(plName);
+};
+
+window.removeFromLiked = (videoId) => {
+    delete window.OCTAVE.liked[videoId];
+    saveCache();
+    if(window.renderLikedSongs) window.renderLikedSongs();
+};
+
 function updatePlayerUI(track) {
     document.getElementById('mini-title-el').textContent = track.title;
     document.getElementById('mini-artist-el').textContent = track.author;
@@ -202,16 +237,18 @@ function updatePlayerUI(track) {
     
     document.getElementById('fp-title').textContent = track.title;
     document.getElementById('fp-artist').textContent = track.author;
-    const fpArt = document.getElementById('fp-art');
-    fpArt.src = track.thumb;
-    fpArt.style.display = 'block';
+    document.getElementById('fp-art').src = track.thumb;
+    document.getElementById('fp-art').style.display = 'block';
 
     const isLiked = !!window.OCTAVE.liked[track.videoId];
     document.getElementById('mini-like-btn').innerHTML = isLiked ? '<i class="fa-solid fa-heart" style="color:var(--accent);"></i>' : '<i class="fa-regular fa-heart"></i>';
     document.getElementById('fp-like').innerHTML = isLiked ? '<i class="fa-solid fa-heart" style="color:var(--accent);"></i>' : '<i class="fa-regular fa-heart"></i>';
     
-    // Refresh Home grids if active
-    if(window.renderHome) window.renderHome();
+    // Automatically re-render currently viewed playlist screen to update stats instantly
+    if(document.getElementById('playlist-detail-list')) {
+        const activeNav = document.querySelector('.nav-item.active').getAttribute('data-tab');
+        if (activeNav === 'home' || activeNav === 'library') window.renderHome(); 
+    }
 }
 
 window.toggleLike = (track) => {
@@ -225,7 +262,6 @@ window.toggleLike = (track) => {
     if(window.renderHome) window.renderHome();
 };
 
-// Contextual Actions UI Binding
 document.querySelector('.play-btn-mini').addEventListener('click', (e) => { e.stopPropagation(); window.togglePlay(); });
 document.getElementById('fp-play').addEventListener('click', window.togglePlay);
 document.getElementById('fp-next').addEventListener('click', playNextLogic);
@@ -239,7 +275,25 @@ document.getElementById('fp-like').addEventListener('click', () => {
     if(window.OCTAVE.currentIndex >= 0) window.toggleLike(window.OCTAVE.queue[window.OCTAVE.currentIndex]);
 });
 
-// Search Engine API
+// Track Seeking
+function seekToPosition(e, containerElement) {
+    if (!YTP || window.OCTAVE.currentIndex === -1) return;
+    const rect = containerElement.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const percentage = Math.max(0, Math.min(1, clickX / rect.width));
+    const totalTime = YTP.getDuration();
+    if (totalTime > 0) {
+        YTP.seekTo(totalTime * percentage, true);
+        document.getElementById('fp-progress-fill').style.width = `${percentage * 100}%`;
+        document.getElementById('mini-progress').style.width = `${percentage * 100}%`;
+    }
+}
+document.getElementById('fp-progress-container').addEventListener('click', (e) => seekToPosition(e, document.getElementById('fp-progress-container')));
+document.querySelector('.mini-player').addEventListener('click', (e) => {
+    const rect = document.querySelector('.mini-player').getBoundingClientRect();
+    if (e.clientY - rect.top <= 10) { e.stopPropagation(); seekToPosition(e, document.querySelector('.mini-player')); }
+});
+
 window.performSearch = async (query) => {
     for (let i = 0; i < INVIDIOUS.length; i++) {
         const base = INVIDIOUS[(invIdx + i) % INVIDIOUS.length];
@@ -256,42 +310,3 @@ window.performSearch = async (query) => {
     }
     return [];
 };
-// --- TRACK SEEKING LOGIC ---
-function seekToPosition(e, containerElement) {
-    if (!YTP || window.OCTAVE.currentIndex === -1) return;
-    
-    // Calculate where the user clicked relative to the width of the bar
-    const rect = containerElement.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const percentage = Math.max(0, Math.min(1, clickX / rect.width));
-    
-    // Get total duration and calculate the new time
-    const totalTime = YTP.getDuration();
-    if (totalTime > 0) {
-        const seekTime = totalTime * percentage;
-        YTP.seekTo(seekTime, true);
-        
-        // Instantly update UI for smooth feeling
-        document.getElementById('fp-progress-fill').style.width = `${percentage * 100}%`;
-        document.getElementById('mini-progress').style.width = `${percentage * 100}%`;
-    }
-}
-
-// Bind to Full Player progress bar
-const fpProgressContainer = document.getElementById('fp-progress-container');
-if (fpProgressContainer) {
-    fpProgressContainer.addEventListener('click', (e) => seekToPosition(e, fpProgressContainer));
-}
-
-// Make the very top edge of the mini-player clickable for seeking too
-const miniPlayerPanel = document.querySelector('.mini-player');
-if (miniPlayerPanel) {
-    miniPlayerPanel.addEventListener('click', (e) => {
-        // Only trigger seek if they click the top 10 pixels (where the bar is)
-        const rect = miniPlayerPanel.getBoundingClientRect();
-        if (e.clientY - rect.top <= 10) {
-            e.stopPropagation(); // Stop the full player from opening
-            seekToPosition(e, miniPlayerPanel);
-        }
-    });
-}
