@@ -1,25 +1,24 @@
-// Preserving Velvet Core Logic
 const INVIDIOUS = [
-  'https://inv.nadeko.net',
-  'https://invidious.privacyredirect.com',
-  'https://invidious.nerdvpn.de',
-  'https://iv.melmac.space',
-  'https://invidious.io.lol',
-  'https://yt.cdaut.de'
+    'https://inv.nadeko.net',
+    'https://invidious.privacyredirect.com',
+    'https://invidious.nerdvpn.de',
+    'https://iv.melmac.space',
+    'https://invidious.io.lol',
+    'https://yt.cdaut.de'
 ];
 let invIdx = 0;
-const inv = () => INVIDIOUS[invIdx % INVIDIOUS.length];
 
 const S = {
-  queue: [], recent: [], liked: new Set(), banned: new Set(),
-  scores: {}, playCount: {}, currentIndex: -1, isPlaying: false,
-  volume: 85, duration: 0, currentTime: 0
+    queue: [],
+    currentIndex: -1,
+    isPlaying: false,
+    volume: 85
 };
 
 let YTP = null;
 let ytReady = false;
 
-// Inject YouTube API
+// 1. Inject YouTube iFrame API
 const script = document.createElement('script');
 script.src = 'https://www.youtube.com/iframe_api';
 document.head.appendChild(script);
@@ -59,8 +58,54 @@ function onYTS(e) {
     }
 }
 
-// Mini Player Controls
+// 2. Playback Controls
 document.querySelector('.play-btn-mini').addEventListener('click', () => {
-    if (!YTP) return;
+    if (!YTP || S.currentIndex === -1) return;
     S.isPlaying ? YTP.pauseVideo() : YTP.playVideo();
 });
+
+window.playTrack = (track) => {
+    S.queue.push(track);
+    S.currentIndex = S.queue.length - 1;
+    
+    // Update Mini Player UI
+    document.querySelector('.mini-title').textContent = track.title;
+    document.querySelector('.mini-artist').textContent = track.author;
+    document.querySelector('.mini-art').style.backgroundImage = `url(${track.thumb})`;
+    document.querySelector('.mini-art').style.backgroundSize = 'cover';
+    
+    // Load into YouTube Engine
+    if (ytReady && YTP) {
+        YTP.loadVideoById({ videoId: track.videoId });
+    }
+};
+
+// 3. Search API Logic
+window.performSearch = async (query) => {
+    for (let i = 0; i < INVIDIOUS.length; i++) {
+        const base = INVIDIOUS[(invIdx + i) % INVIDIOUS.length];
+        try {
+            const r = await fetch(`${base}/api/v1/search?q=${encodeURIComponent(query)}&type=video&fields=videoId,title,author,videoThumbnails`, { signal: AbortSignal.timeout(7000) });
+            if (!r.ok) continue;
+            
+            const d = await r.json(); 
+            invIdx = (invIdx + i) % INVIDIOUS.length;
+            
+            return d.map(item => ({
+                videoId: item.videoId,
+                title: item.title,
+                author: item.author,
+                thumb: getBestThumb(item.videoThumbnails)
+            }));
+        } catch(e) { 
+            continue; 
+        }
+    }
+    return [];
+};
+
+function getBestThumb(thumbs) {
+    if (!thumbs || !thumbs.length) return '';
+    const pref = thumbs.find(t => t.quality === 'medium' || t.quality === 'high');
+    return pref ? pref.url : thumbs[0].url;
+}
