@@ -60,7 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('close-select-playlist').addEventListener('click', () => document.getElementById('select-playlist-modal').classList.remove('active'));
 });
 
-// --- MENU & SEAMLESS FETCHING DELEGATION ---
+// --- MENU & SEAMLESS FETCHING ---
 document.body.addEventListener('click', async (e) => {
     if (e.target.closest('#menu-btn')) {
         document.getElementById('side-menu').classList.add('active');
@@ -75,18 +75,15 @@ document.body.addEventListener('click', async (e) => {
     if (pageBtn) {
         document.getElementById('side-menu').classList.remove('active');
         document.getElementById('menu-backdrop').classList.remove('active');
-        
         const url = pageBtn.getAttribute('data-page');
         const dynamicView = document.getElementById('dynamic-view');
         dynamicView.innerHTML = '<div style="text-align:center; padding:40px;"><i class="fa-solid fa-spinner fa-spin" style="font-size:24px; color:var(--accent);"></i></div>';
-        
         try {
             const r = await fetch(url);
             const html = await r.text();
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
             dynamicView.innerHTML = doc.querySelector('.mobile-app').innerHTML;
-            
             const backBtn = dynamicView.querySelector('a[href="index.html"]');
             if (backBtn) {
                 backBtn.addEventListener('click', (ev) => {
@@ -94,11 +91,79 @@ document.body.addEventListener('click', async (e) => {
                     document.querySelector('.nav-item[data-tab="home"]').click();
                 });
             }
-        } catch(err) {
-            dynamicView.innerHTML = '<div class="empty-state-text">Failed to load page.</div>';
-        }
+        } catch(err) { dynamicView.innerHTML = '<div class="empty-state-text">Failed to load page.</div>'; }
     }
 });
+
+// --- VAULT BINDINGS ---
+document.getElementById('export-vault-btn').addEventListener('click', () => {
+    document.getElementById('side-menu').classList.remove('active');
+    document.getElementById('menu-backdrop').classList.remove('active');
+    window.exportVault();
+});
+document.getElementById('import-vault-btn').addEventListener('click', () => {
+    document.getElementById('import-vault-input').click();
+});
+document.getElementById('import-vault-input').addEventListener('change', window.importVault);
+
+
+// --- MEGA UPDATE: FULL PLAYER OVERLAYS (LYRICS, BIO, QUEUE, TIMER) ---
+const fpPanel = document.getElementById('fp-overlay-panel');
+const fpContent = document.getElementById('fp-overlay-content');
+const fpTitle = document.getElementById('fp-overlay-title');
+
+document.getElementById('close-fp-overlay').addEventListener('click', () => fpPanel.classList.remove('active'));
+
+document.getElementById('fp-lyrics-btn').addEventListener('click', async () => {
+    if(window.OCTAVE.currentIndex < 0) return;
+    fpTitle.innerText = 'Lyrics';
+    fpContent.innerHTML = '<div style="text-align:center; margin-top: 40px;"><i class="fa-solid fa-spinner fa-spin" style="font-size: 24px; color: var(--accent);"></i></div>';
+    fpPanel.classList.add('active');
+    
+    const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
+    const lyrics = await window.fetchLyrics(track.author, track.title);
+    fpContent.innerHTML = `<div id="lyrics-content">${lyrics}</div>`;
+});
+
+document.getElementById('fp-bio-btn').addEventListener('click', async () => {
+    if(window.OCTAVE.currentIndex < 0) return;
+    fpTitle.innerText = 'Artist Bio';
+    fpContent.innerHTML = '<div style="text-align:center; margin-top: 40px;"><i class="fa-solid fa-spinner fa-spin" style="font-size: 24px; color: var(--accent);"></i></div>';
+    fpPanel.classList.add('active');
+    
+    const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
+    const bio = await window.fetchArtistBio(track.author);
+    fpContent.innerHTML = `<div style="color: var(--text-primary); font-size: 15px; line-height: 1.8;">${bio}</div>`;
+});
+
+document.getElementById('fp-queue-btn').addEventListener('click', () => {
+    if(window.OCTAVE.currentIndex < 0) return;
+    fpTitle.innerText = 'Up Next';
+    fpContent.innerHTML = '';
+    fpPanel.classList.add('active');
+    
+    const q = window.OCTAVE.queue;
+    const curr = window.OCTAVE.currentIndex;
+    
+    for(let i = curr; i < q.length; i++) {
+        const track = q[i];
+        const isPlaying = i === curr;
+        const el = document.createElement('div');
+        el.style.cssText = `display: flex; align-items: center; gap: 14px; padding: 12px; background: ${isPlaying ? 'rgba(30,215,96,0.1)' : 'var(--bg-surface)'}; border-radius: 8px; margin-bottom: 12px; border: ${isPlaying ? '1px solid var(--accent)' : '1px solid transparent'};`;
+        el.innerHTML = `
+            <img src="${track.thumb}" style="width: 40px; height: 40px; border-radius: 6px; object-fit: cover;">
+            <div style="flex: 1; min-width: 0;">
+                <div style="font-size: 14px; font-weight: 600; color: ${isPlaying ? 'var(--accent)' : 'var(--text-primary)'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${track.title}</div>
+                <div style="font-size: 12px; color: var(--text-secondary);">${track.author}</div>
+            </div>
+            ${isPlaying ? '<i class="fa-solid fa-volume-high" style="color: var(--accent);"></i>' : ''}
+        `;
+        fpContent.appendChild(el);
+    }
+});
+
+document.getElementById('fp-timer-btn').addEventListener('click', () => document.getElementById('timer-modal').classList.add('active'));
+document.getElementById('close-timer').addEventListener('click', () => document.getElementById('timer-modal').classList.remove('active'));
 
 const fpOptionsBtn = document.getElementById('fp-options');
 if (fpOptionsBtn) {
@@ -171,11 +236,9 @@ function renderLibrary() {
     });
 }
 
-// --- FULLY FLEDGED PLAYLIST DETAIL VIEW ---
 window.renderPlaylistDetail = (plName) => {
     const pl = window.OCTAVE.playlists[plName];
     if (!pl) return;
-
     const dynamicView = document.getElementById('dynamic-view');
     let totalPlays = pl.reduce((sum, track) => sum + (window.OCTAVE.playStats[track.videoId] || 0), 0);
 
@@ -185,45 +248,26 @@ window.renderPlaylistDetail = (plName) => {
                 <button class="icon-btn" onclick="document.querySelector('.nav-item.active').click()"><i class="fa-solid fa-arrow-left"></i></button>
                 <h1 style="font-size: 28px; font-weight: 800;">${plName}</h1>
             </div>
-            <div style="color: var(--text-secondary); font-size: 14px; margin-bottom: 24px;">
-                ${pl.length} tracks • ${totalPlays} lifetime plays
-            </div>
+            <div style="color: var(--text-secondary); font-size: 14px; margin-bottom: 24px;">${pl.length} tracks • ${totalPlays} lifetime plays</div>
             <div style="display: flex; gap: 12px;">
-                <button class="btn-primary" onclick="window.playPlaylist('${plName}')" style="flex: 1; padding: 14px; border-radius: 100px; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                    <i class="fa-solid fa-play"></i> Play All
-                </button>
-                <button class="btn-secondary" onclick="window.smartShufflePlaylist('${plName}')" style="flex: 1; padding: 14px; border-radius: 100px; display: flex; align-items: center; justify-content: center; gap: 8px; border-color: var(--accent); color: var(--accent);">
-                    <i class="fa-solid fa-wand-magic-sparkles"></i> Smart Shuffle
-                </button>
+                <button class="btn-primary" onclick="window.playPlaylist('${plName}')" style="flex: 1; padding: 14px; border-radius: 100px; display: flex; align-items: center; justify-content: center; gap: 8px;"><i class="fa-solid fa-play"></i> Play All</button>
+                <button class="btn-secondary" onclick="window.smartShufflePlaylist('${plName}')" style="flex: 1; padding: 14px; border-radius: 100px; display: flex; align-items: center; justify-content: center; gap: 8px; border-color: var(--accent); color: var(--accent);"><i class="fa-solid fa-wand-magic-sparkles"></i> Smart Shuffle</button>
             </div>
         </div>
         <div class="vertical-list" id="playlist-detail-list" style="padding: 0 20px;"></div>
         <div class="bottom-spacer"></div>
     `;
-    
     const listContainer = document.getElementById('playlist-detail-list');
-    if (pl.length === 0) {
-        listContainer.innerHTML = '<div class="empty-state-text">This playlist is empty. Add songs via Search.</div>';
-    } else {
+    if (pl.length === 0) listContainer.innerHTML = '<div class="empty-state-text">This playlist is empty. Add songs via Search.</div>';
+    else {
         pl.forEach((track, index) => {
             const stats = window.OCTAVE.playStats[track.videoId] || 0;
             const el = document.createElement('div');
             el.style.cssText = 'display: flex; align-items: center; gap: 14px; padding: 12px; background: var(--bg-surface); border-radius: 8px; margin-bottom: 12px; cursor: pointer;';
-            el.innerHTML = `
-                <img src="${track.thumb}" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover;" alt="Art">
-                <div style="flex: 1; min-width: 0;">
-                    <div style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${track.title}</div>
-                    <div style="font-size: 12px; color: var(--text-secondary);">${track.author} • <i class="fa-solid fa-fire" style="color: #ff5000; font-size: 10px;"></i> ${stats} plays</div>
-                </div>
-                <button class="icon-btn remove-btn" style="color: #ff4444;"><i class="fa-solid fa-trash-can"></i></button>
-            `;
+            el.innerHTML = `<img src="${track.thumb}" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover;"><div style="flex: 1; min-width: 0;"><div style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${track.title}</div><div style="font-size: 12px; color: var(--text-secondary);">${track.author} • <i class="fa-solid fa-fire" style="color: #ff5000; font-size: 10px;"></i> ${stats} plays</div></div><button class="icon-btn remove-btn" style="color: #ff4444;"><i class="fa-solid fa-trash-can"></i></button>`;
             el.addEventListener('click', (e) => {
-                if(e.target.closest('.remove-btn')) {
-                    window.removeFromPlaylist(plName, index);
-                    return;
-                }
-                window.OCTAVE.queue = [...pl];
-                window.playTrackByIndex(index);
+                if(e.target.closest('.remove-btn')) { window.removeFromPlaylist(plName, index); return; }
+                window.OCTAVE.queue = [...pl]; window.playTrackByIndex(index);
             });
             listContainer.appendChild(el);
         });
@@ -243,45 +287,29 @@ window.renderLikedSongs = () => {
             </div>
             <div style="color: var(--text-secondary); font-size: 14px; margin-bottom: 24px;">${pl.length} tracks • ${totalPlays} lifetime plays</div>
             <div style="display: flex; gap: 12px;">
-                <button class="btn-primary" onclick="window.OCTAVE.queue = Object.values(window.OCTAVE.liked); if(window.OCTAVE.queue.length>0) window.playTrackByIndex(0);" style="flex: 1; padding: 14px; border-radius: 100px; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                    <i class="fa-solid fa-play"></i> Play All
-                </button>
+                <button class="btn-primary" onclick="window.OCTAVE.queue = Object.values(window.OCTAVE.liked); if(window.OCTAVE.queue.length>0) window.playTrackByIndex(0);" style="flex: 1; padding: 14px; border-radius: 100px; display: flex; align-items: center; justify-content: center; gap: 8px;"><i class="fa-solid fa-play"></i> Play All</button>
             </div>
         </div>
         <div class="vertical-list" id="playlist-detail-list" style="padding: 0 20px;"></div>
         <div class="bottom-spacer"></div>
     `;
-    
     const listContainer = document.getElementById('playlist-detail-list');
-    if (pl.length === 0) {
-        listContainer.innerHTML = '<div class="empty-state-text">No liked songs yet. Tap the heart on any track.</div>';
-    } else {
+    if (pl.length === 0) listContainer.innerHTML = '<div class="empty-state-text">No liked songs yet. Tap the heart on any track.</div>';
+    else {
         pl.forEach((track, index) => {
             const stats = window.OCTAVE.playStats[track.videoId] || 0;
             const el = document.createElement('div');
             el.style.cssText = 'display: flex; align-items: center; gap: 14px; padding: 12px; background: var(--bg-surface); border-radius: 8px; margin-bottom: 12px; cursor: pointer;';
-            el.innerHTML = `
-                <img src="${track.thumb}" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover;">
-                <div style="flex: 1; min-width: 0;">
-                    <div style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${track.title}</div>
-                    <div style="font-size: 12px; color: var(--text-secondary);">${track.author} • <i class="fa-solid fa-fire" style="color: #ff5000; font-size: 10px;"></i> ${stats} plays</div>
-                </div>
-                <button class="icon-btn remove-btn" style="color: var(--accent);"><i class="fa-solid fa-heart"></i></button>
-            `;
+            el.innerHTML = `<img src="${track.thumb}" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover;"><div style="flex: 1; min-width: 0;"><div style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${track.title}</div><div style="font-size: 12px; color: var(--text-secondary);">${track.author} • <i class="fa-solid fa-fire" style="color: #ff5000; font-size: 10px;"></i> ${stats} plays</div></div><button class="icon-btn remove-btn" style="color: var(--accent);"><i class="fa-solid fa-heart"></i></button>`;
             el.addEventListener('click', (e) => {
-                if(e.target.closest('.remove-btn')) {
-                    window.removeFromLiked(track.videoId);
-                    return;
-                }
-                window.OCTAVE.queue = [...pl];
-                window.playTrackByIndex(index);
+                if(e.target.closest('.remove-btn')) { window.removeFromLiked(track.videoId); return; }
+                window.OCTAVE.queue = [...pl]; window.playTrackByIndex(index);
             });
             listContainer.appendChild(el);
         });
     }
 };
 
-// --- SEARCH & MODALS ---
 function bindSearch() {
     const input = document.getElementById('searchInput');
     const resContainer = document.getElementById('searchResults');
@@ -338,17 +366,14 @@ function buildTrackItem(track) {
         </div>
         <button class="track-opts-btn"><i class="fa-solid fa-ellipsis-vertical"></i></button>
     `;
-    
     el.addEventListener('click', (e) => {
         if(e.target.closest('.track-opts-btn')) return; 
         window.playTrack(track);
     });
-
     el.querySelector('.track-opts-btn').addEventListener('click', (e) => {
         e.stopPropagation();
         openTrackOptions(track);
     });
-
     return el;
 }
 
@@ -385,11 +410,7 @@ function bindHomeModals() {
 function openTrackOptions(track) {
     window.OCTAVE.activeTrackForOptions = track;
     const modal = document.getElementById('track-options-modal');
-    document.getElementById('opt-track-info').innerHTML = `
-        <img src="${track.thumb}" style="width: 40px; height: 40px; border-radius: 6px;">
-        <div style="font-size: 14px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden;">${track.title}</div>
-    `;
-    
+    document.getElementById('opt-track-info').innerHTML = `<img src="${track.thumb}" style="width: 40px; height: 40px; border-radius: 6px;"><div style="font-size: 14px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden;">${track.title}</div>`;
     const isLiked = !!window.OCTAVE.liked[track.videoId];
     document.getElementById('opt-like-track').innerHTML = isLiked ? '<i class="fa-solid fa-heart" style="color:var(--accent);"></i> <span>Unlike Track</span>' : '<i class="fa-regular fa-heart"></i> <span>Like Track</span>';
     modal.classList.add('active');
