@@ -12,12 +12,22 @@
 </head>
 <body>
 
+    <!-- SPLASH SCREEN -->
+    <div id="splash-screen" class="splash-screen">
+        <img src="logo.png" alt="Octave Logo" class="splash-logo" onerror="this.style.display='none'">
+        <p class="splash-text">"Free music subscription was promised to you 3000 years ago..."</p>
+    </div>
+
     <div class="mobile-app">
         
         <main class="main-content scroll-y" id="dynamic-view">
             <header class="app-header">
                 <div class="greeting">
-                    <h1 id="time-greeting">Good afternoon</h1>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <!-- HEADER LOGO -->
+                        <img src="logo.png" alt="Logo" style="width: 32px; height: 32px; border-radius: 8px; object-fit: cover;" onerror="this.style.display='none'">
+                        <h1 id="time-greeting">Good evening</h1>
+                    </div>
                     <div class="header-actions">
                         <button class="icon-btn" id="menu-btn"><i class="fa-solid fa-bars"></i></button>
                     </div>
@@ -43,7 +53,6 @@
                 </div>
                 <div class="vertical-list" id="home-playlists"></div>
             </section>
-            
             <div class="bottom-spacer"></div>
         </main>
 
@@ -63,7 +72,6 @@
         </div>
 
         <div id="full-player" class="full-player-overlay">
-            <div id="fp-ambient-bg" class="ambient-bg"></div>
             <div class="fp-header">
                 <button class="icon-btn" id="close-fp"><i class="fa-solid fa-chevron-down"></i></button>
                 <span class="fp-header-title">Now Playing</span>
@@ -71,7 +79,7 @@
             </div>
             
             <div class="fp-art-container">
-                <img id="fp-art" src="" alt="Album Art" class="shadow-heavy">
+                <img id="fp-art" src="" alt="Album Art">
             </div>
             
             <div class="fp-info-row">
@@ -86,7 +94,7 @@
                 <button class="icon-btn" id="fp-lyrics-btn"><i class="fa-solid fa-align-left"></i> Lyrics</button>
                 <button class="icon-btn" id="fp-queue-btn"><i class="fa-solid fa-list-ol"></i> Up Next</button>
             </div>
-            
+
             <div class="fp-progress-section">
                 <div class="fp-progress-bar" id="fp-progress-container">
                     <div class="fp-progress-fill" id="fp-progress-fill" style="width: 0%;"></div>
@@ -191,7 +199,8 @@
             </div>
         </div>
     </div>
+
     <script src="js/player.js"></script>
     <script src="js/app.js"></script>
 </body>
-</html>
+                        </html>
