@@ -865,3 +865,56 @@ body {
 .fp-controls {
     margin-bottom: 10px;
 }
+/* --- SPOTIFY-STYLE TIGHT LAYOUT --- */
+.full-player-overlay {
+    display: flex;
+    flex-direction: column;
+    padding: 10px 20px 30px 20px !important; /* Extra bottom padding for nav */
+    height: 100vh;
+    box-sizing: border-box;
+    overflow: hidden; /* No scrolling */
+}
+
+.fp-art-container {
+    flex: 0 1 auto; 
+    max-height: 35vh; /* ART SHRINKS TO FIT */
+    margin: 10px auto;
+    display: flex;
+    justify-content: center;
+}
+
+#fp-art {
+    max-height: 100%;
+    aspect-ratio: 1/1;
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+.fp-info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 10px 0;
+}
+
+/* Lyrics/Queue buttons 30% smaller */
+.fp-actions-grid {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 20px;
+    transform: scale(0.7);
+    transform-origin: center;
+    margin: -10px 0;
+}
+
+.fp-progress-section {
+    margin: 10px 0;
+}
+
+.fp-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 40px;
+    margin-bottom: 20px;
+}
