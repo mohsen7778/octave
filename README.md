@@ -4,8 +4,13 @@ A fully private Spotify alternative that runs entirely in your browser with zero
 
 ## Preview
 
-![Screenshot 1](./screenshot/screenshot1.jpg)
-![Screenshot 2](./screenshot/screenshot2.jpg)
+<p align="center">
+  <img src="./screenshot/screenshot1.jpg" width="750">
+</p>
+
+<p align="center">
+  <img src="./screenshot/screenshot2.jpg" width="500">
+</p>
 
 👉 Live Demo: https://mohsen7778.github.io/octavemusicapp/
 
