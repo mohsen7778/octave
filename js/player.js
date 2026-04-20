@@ -3,72 +3,60 @@ const INVIDIOUS = [
     'https://invidious.privacyredirect.com',
     'https://invidious.nerdvpn.de',
     'https://iv.melmac.space',
-    'https://invidious.io.lol'
+    'https://invidious.io.lol',
+    'https://yt.cdaut.de'
 ];
 let invIdx = 0;
 
-// NEW: Piped API instances specifically for bypassing YouTube IP blocks
-const PIPED = [
-    'https://pipedapi.kavin.rocks',
-    'https://pipedapi.smnz.de',
-    'https://pipedapi.adminforge.de',
-    'https://pipedapi.tokhmi.xyz'
-];
-let pipedIdx = 0;
+const S = { queue: [], currentIndex: -1, isPlaying: false, volume: 100 };
+let YTP = null, ytReady = false, progressTimer = null;
 
-const S = { queue: [], currentIndex: -1, isPlaying: false };
+// 1. Inject YouTube iFrame API
+const script = document.createElement('script');
+script.src = 'https://www.youtube.com/iframe_api';
+document.head.appendChild(script);
 
-// 1. Native HTML5 Audio Engine
-const audio = new Audio();
+window.onYouTubeIframeAPIReady = () => {
+    const container = document.createElement('div');
+    container.id = 'yt-hidden-frame';
+    container.style.cssText = 'position:fixed;width:1px;height:1px;bottom:0;right:0;opacity:0;pointer-events:none;';
+    document.body.appendChild(container);
 
-audio.addEventListener('playing', () => {
-    S.isPlaying = true;
-    updatePlayIcons('fa-solid fa-pause');
-});
+    YTP = new YT.Player('yt-hidden-frame', {
+        height: '1', width: '1',
+        playerVars: { autoplay: 0, controls: 0, playsinline: 1 },
+        events: {
+            onReady: e => { ytReady = true; e.target.setVolume(S.volume); },
+            onStateChange: onYTS
+        }
+    });
+};
 
-audio.addEventListener('pause', () => {
-    S.isPlaying = false;
-    updatePlayIcons('fa-solid fa-play');
-});
-
-audio.addEventListener('waiting', () => {
-    updatePlayIcons('fa-solid fa-spinner fa-spin');
-});
-
-audio.addEventListener('ended', () => {
-    S.isPlaying = false;
-    updatePlayIcons('fa-solid fa-play');
-});
-
-audio.addEventListener('timeupdate', () => {
-    if (audio.duration) {
-        const percent = (audio.currentTime / audio.duration) * 100;
-        const miniProg = document.getElementById('mini-progress');
-        const fpProg = document.getElementById('fp-progress-fill');
-        if (miniProg) miniProg.style.width = `${percent}%`;
-        if (fpProg) fpProg.style.width = `${percent}%`;
-        
-        const currTime = document.getElementById('fp-time-current');
-        const totTime = document.getElementById('fp-time-total');
-        if (currTime) currTime.textContent = formatTime(audio.currentTime);
-        if (totTime) totTime.textContent = formatTime(audio.duration);
-    }
-});
-
-function updatePlayIcons(iconClass) {
+function onYTS(e) {
     const miniIcon = document.querySelector('.play-btn-mini i');
     const fullIcon = document.querySelector('#fp-play i');
-    if (miniIcon) miniIcon.className = iconClass;
-    if (fullIcon) fullIcon.className = iconClass;
+    
+    if (e.data === YT.PlayerState.PLAYING) {
+        S.isPlaying = true;
+        if(miniIcon) miniIcon.className = 'fa-solid fa-pause';
+        if(fullIcon) fullIcon.className = 'fa-solid fa-pause';
+        startProgressTracking();
+    } else if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) {
+        S.isPlaying = false;
+        if(miniIcon) miniIcon.className = 'fa-solid fa-play';
+        if(fullIcon) fullIcon.className = 'fa-solid fa-play';
+        clearInterval(progressTimer);
+    }
 }
 
+// 2. Playback Controls
 function togglePlay() {
-    if (!audio.src || S.currentIndex === -1) return;
-    S.isPlaying ? audio.pause() : audio.play();
+    if (!YTP || S.currentIndex === -1) return;
+    S.isPlaying ? YTP.pauseVideo() : YTP.playVideo();
 }
 
 document.querySelector('.play-btn-mini').addEventListener('click', (e) => {
-    e.stopPropagation();
+    e.stopPropagation(); // Prevents opening the full player when just pausing
     togglePlay();
 });
 
@@ -88,6 +76,29 @@ if(closeFpBtn) {
     });
 }
 
+// Sync Progress Bars
+function startProgressTracking() {
+    clearInterval(progressTimer);
+    progressTimer = setInterval(() => {
+        if (YTP && S.isPlaying) {
+            const current = YTP.getCurrentTime();
+            const total = YTP.getDuration();
+            if (total > 0) {
+                const percent = (current / total) * 100;
+                const miniProg = document.getElementById('mini-progress');
+                const fpProg = document.getElementById('fp-progress-fill');
+                if (miniProg) miniProg.style.width = `${percent}%`;
+                if (fpProg) fpProg.style.width = `${percent}%`;
+                
+                const currTime = document.getElementById('fp-time-current');
+                const totTime = document.getElementById('fp-time-total');
+                if (currTime) currTime.textContent = formatTime(current);
+                if (totTime) totTime.textContent = formatTime(total);
+            }
+        }
+    }, 500);
+}
+
 function formatTime(seconds) {
     if (!seconds || isNaN(seconds)) return "0:00";
     const m = Math.floor(seconds / 60);
@@ -95,12 +106,12 @@ function formatTime(seconds) {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
 }
 
-// 2. Load Track & Fetch Proxy Audio Stream via Piped
-window.playTrack = async (track) => {
+// 3. Load Track Logic & Background Media Session
+window.playTrack = (track) => {
     S.queue.push(track);
     S.currentIndex = S.queue.length - 1;
     
-    // Update UI immediately
+    // Update Mini UI
     const miniTitle = document.querySelector('.mini-title');
     const miniArtist = document.querySelector('.mini-artist');
     const miniArt = document.querySelector('.mini-art');
@@ -111,6 +122,7 @@ window.playTrack = async (track) => {
         miniArt.style.backgroundSize = 'cover';
     }
     
+    // Update Full Player UI
     const fpTitle = document.getElementById('fp-title');
     const fpArtist = document.getElementById('fp-artist');
     const fpArt = document.getElementById('fp-art');
@@ -120,69 +132,26 @@ window.playTrack = async (track) => {
         fpArt.src = track.thumb;
         fpArt.style.display = 'block';
     }
-
-    // Force UI into loading state
-    updatePlayIcons('fa-solid fa-spinner fa-spin');
     
-    // Start smart fetch loop using Piped API
-    await fetchAndPlay(track, 0);
+    // Load Engine
+    if (ytReady && YTP) {
+        YTP.loadVideoById({ videoId: track.videoId });
+    }
+
+    // Enable Lock Screen / Background Play
+    if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+            title: track.title,
+            artist: track.author,
+            album: 'Octave',
+            artwork: [{ src: track.thumb, sizes: '512x512', type: 'image/jpeg' }]
+        });
+        navigator.mediaSession.setActionHandler('play', () => YTP.playVideo());
+        navigator.mediaSession.setActionHandler('pause', () => YTP.pauseVideo());
+    }
 };
 
-// Piped API Recursive Fetch (Bypasses IP Blocks)
-async function fetchAndPlay(track, attempt) {
-    if (attempt >= PIPED.length) {
-        alert("Audio streams currently unavailable. Please try another track.");
-        updatePlayIcons('fa-solid fa-play');
-        return;
-    }
-
-    const base = PIPED[(pipedIdx + attempt) % PIPED.length];
-    let streamUrl = null;
-
-    try {
-        const r = await fetch(`${base}/streams/${track.videoId}`, { signal: AbortSignal.timeout(6000) });
-        if (r.ok) {
-            const d = await r.json();
-            // Get proxied audio streams
-            if (d.audioStreams && d.audioStreams.length > 0) {
-                // Grab the highest bitrate M4A or WebM
-                streamUrl = d.audioStreams[0].url; 
-            }
-        }
-    } catch(e) {
-        console.warn(`Piped Server ${base} fetch failed, trying next...`);
-    }
-
-    if (!streamUrl) {
-        await fetchAndPlay(track, attempt + 1);
-        return;
-    }
-
-    audio.src = streamUrl;
-    
-    try {
-        await audio.play();
-        // Success! Save this working index for faster future loads
-        pipedIdx = (pipedIdx + attempt) % PIPED.length;
-
-        // Set Lock Screen details
-        if ('mediaSession' in navigator) {
-            navigator.mediaSession.metadata = new MediaMetadata({
-                title: track.title,
-                artist: track.author,
-                album: 'Octave',
-                artwork: [{ src: track.thumb, sizes: '512x512', type: 'image/jpeg' }]
-            });
-            navigator.mediaSession.setActionHandler('play', () => audio.play());
-            navigator.mediaSession.setActionHandler('pause', () => audio.pause());
-        }
-    } catch (e) {
-        console.warn("Audio play blocked. Retrying on next server...", e);
-        await fetchAndPlay(track, attempt + 1);
-    }
-}
-
-// 3. Search API (Still uses Invidious because it's faster for text search)
+// 4. Search API
 window.performSearch = async (query) => {
     for (let i = 0; i < INVIDIOUS.length; i++) {
         const base = INVIDIOUS[(invIdx + i) % INVIDIOUS.length];
