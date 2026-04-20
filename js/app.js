@@ -296,3 +296,51 @@ document.getElementById('opt-add-playlist').addEventListener('click', () => {
     }
     plModal.classList.add('active');
 });
+// --- SEAMLESS PAGE FETCHING (Fixes Audio Stopping) ---
+document.body.addEventListener('click', async (e) => {
+    const pageBtn = e.target.closest('[data-page]');
+    if (pageBtn) {
+        // Hide the sidebar
+        document.getElementById('side-menu').classList.remove('active');
+        document.getElementById('menu-backdrop').classList.remove('active');
+        
+        const url = pageBtn.getAttribute('data-page');
+        const dynamicView = document.getElementById('dynamic-view');
+        
+        // Show loading spinner
+        dynamicView.innerHTML = '<div style="text-align:center; padding:40px;"><i class="fa-solid fa-spinner fa-spin" style="font-size:24px; color:var(--accent);"></i></div>';
+        
+        try {
+            // Fetch the separate HTML file silently
+            const r = await fetch(url);
+            const html = await r.text();
+            
+            // Extract the content and inject it
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            dynamicView.innerHTML = doc.querySelector('.mobile-app').innerHTML;
+            
+            // Hijack the back button inside those files so it doesn't reload the page
+            const backBtn = dynamicView.querySelector('a[href="index.html"]');
+            if (backBtn) {
+                backBtn.addEventListener('click', (ev) => {
+                    ev.preventDefault();
+                    document.querySelector('.nav-item[data-tab="home"]').click();
+                });
+            }
+        } catch(err) {
+            dynamicView.innerHTML = '<div class="empty-state-text">Failed to load page.</div>';
+        }
+    }
+});
+
+// --- ADD TO PLAYLIST FROM FULL PLAYER ---
+const fpOptionsBtn = document.getElementById('fp-options');
+if (fpOptionsBtn) {
+    fpOptionsBtn.addEventListener('click', () => {
+        if (window.OCTAVE && window.OCTAVE.currentIndex >= 0) {
+            const currentTrack = window.OCTAVE.queue[window.OCTAVE.currentIndex];
+            openTrackOptions(currentTrack);
+        }
+    });
+}
