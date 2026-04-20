@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Octave</title>
+    <title>Octave | Premium Audio</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -21,7 +21,7 @@
                     <h1 id="time-greeting">Good afternoon</h1>
                     <div class="header-actions">
                         <button class="icon-btn"><i class="fa-regular fa-bell"></i></button>
-                        <button class="icon-btn"><i class="fa-solid fa-gear"></i></button>
+                        <button class="icon-btn" id="menu-btn"><i class="fa-solid fa-bars"></i></button>
                     </div>
                 </div>
                 
@@ -35,48 +35,24 @@
 
             <section class="content-section">
                 <h2 class="section-title">Recently Played</h2>
-                <div class="horizontal-scroll scroll-x">
-                    <div class="square-card">
-                        <div class="card-art shadow-heavy"></div>
-                        <div class="card-title">Midnight City</div>
-                    </div>
-                    <div class="square-card">
-                        <div class="card-art shadow-heavy"></div>
-                        <div class="card-title">After Hours</div>
-                    </div>
-                    <div class="square-card">
-                        <div class="card-art shadow-heavy"></div>
-                        <div class="card-title">Resonance</div>
-                    </div>
-                    <div class="square-card">
-                        <div class="card-art shadow-heavy"></div>
-                        <div class="card-title">Starboy</div>
-                    </div>
+                <div class="horizontal-scroll scroll-x" id="home-recent-grid">
+                    <div style="color: var(--text-secondary); font-size: 13px; padding-bottom: 20px;">Play some tracks to build your history...</div>
                 </div>
             </section>
 
             <section class="content-section">
-                <h2 class="section-title">Your Heavy Duty Mixes</h2>
-                <div class="vertical-list">
+                <div style="display: flex; justify-content: space-between; align-items: center; padding-right: 20px; margin-bottom: 16px;">
+                    <h2 class="section-title" style="margin-bottom: 0;">Your Heavy Duty Mixes</h2>
+                    <button class="icon-btn" id="open-create-playlist"><i class="fa-solid fa-plus"></i></button>
+                </div>
+                <div class="vertical-list" id="home-playlists">
                     <div class="list-item">
-                        <div class="list-art shadow-heavy"></div>
-                        <div class="list-info">
-                            <div class="list-title">Late Night Drive</div>
-                            <div class="list-subtitle">The Weeknd, Kavinsky, M83</div>
+                        <div class="list-art shadow-heavy" style="background: linear-gradient(135deg, var(--accent), #0b5c26); display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff;">
+                            <i class="fa-solid fa-heart"></i>
                         </div>
-                    </div>
-                    <div class="list-item">
-                        <div class="list-art shadow-heavy"></div>
                         <div class="list-info">
-                            <div class="list-title">Focus / Code</div>
-                            <div class="list-subtitle">Synthwave & Lo-Fi Beats</div>
-                        </div>
-                    </div>
-                    <div class="list-item">
-                        <div class="list-art shadow-heavy"></div>
-                        <div class="list-info">
-                            <div class="list-title">Gym Heavy</div>
-                            <div class="list-subtitle">High energy workout tracks</div>
+                            <div class="list-title">Liked Songs</div>
+                            <div class="list-subtitle">Your saved favorites</div>
                         </div>
                     </div>
                 </div>
@@ -157,6 +133,53 @@
                 <span>Premium</span>
             </div>
         </nav>
+
+        <div class="drawer-backdrop" id="menu-backdrop"></div>
+        <div class="side-drawer" id="side-menu">
+            <div class="drawer-header">
+                <h2>Settings</h2>
+                <button class="icon-btn" id="close-menu"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="drawer-links">
+                <div class="drawer-item" id="open-terms"><i class="fa-solid fa-scale-balanced"></i> Terms & Conditions</div>
+                <a href="https://instagram.com/7o7xr" target="_blank" class="drawer-item"><i class="fa-brands fa-instagram"></i> Contact Support</a>
+            </div>
+        </div>
+
+        <div class="modal-overlay" id="brave-modal">
+            <div class="modal-content glass-panel shadow-heavy">
+                <div style="font-size: 40px; color: #ff5000; margin-bottom: 16px; text-align: center;"><i class="fa-brands fa-brave"></i></div>
+                <h3 style="text-align: center; margin-bottom: 12px;">Use Brave Browser</h3>
+                <p style="color: var(--text-secondary); font-size: 14px; text-align: center; margin-bottom: 24px; line-height: 1.5;">For the ultimate heavy-duty experience with unkillable background play and zero ads, we strictly recommend launching Octave in Brave Browser.</p>
+                <div class="modal-actions">
+                    <button class="btn-secondary" id="close-brave">Maybe Later</button>
+                    <a href="https://play.google.com/store/apps/details?id=com.brave.browser" target="_blank" class="btn-primary" id="get-brave">Get Brave</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-overlay" id="terms-modal">
+            <div class="modal-content glass-panel shadow-heavy terms-content">
+                <h3 style="margin-bottom: 16px;">Terms & Conditions</h3>
+                <div class="legal-text scroll-y" style="max-height: 50vh; color: var(--text-secondary); font-size: 13px; line-height: 1.6; padding-right: 10px;">
+                    <p><strong>1. Service Overview</strong><br>Octave is strictly a client-side interface built for educational and personal use.</p>
+                    <p style="margin-top: 10px;"><strong>2. Third-Party Media</strong><br>Octave does not host, store, or distribute any copyrighted media or files. All audio streams and metadata are provided directly through decentralized, third-party public APIs (e.g., Invidious). The creators of Octave hold absolutely no liability for the content accessed via these external endpoints.</p>
+                    <p style="margin-top: 10px;"><strong>3. Data & Privacy</strong><br>All user data—including playlists, liked songs, and listening history—is stored exclusively on your device's local browser cache. Octave collects zero telemetry and tracks no personal data.</p>
+                </div>
+                <button class="btn-primary w-100" style="margin-top: 20px; width: 100%;" id="close-terms">I Agree</button>
+            </div>
+        </div>
+
+        <div class="modal-overlay" id="playlist-modal">
+            <div class="modal-content glass-panel shadow-heavy">
+                <h3 style="margin-bottom: 16px;">Create Playlist</h3>
+                <input type="text" id="playlist-name" class="modern-input" placeholder="Playlist Name (e.g. Gym Heavy)" autocomplete="off">
+                <div class="modal-actions" style="margin-top: 24px;">
+                    <button class="btn-secondary" id="close-playlist">Cancel</button>
+                    <button class="btn-primary" id="save-playlist">Create</button>
+                </div>
+            </div>
+        </div>
 
     </div>
 
