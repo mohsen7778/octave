@@ -79,8 +79,23 @@ window.onYouTubeIframeAPIReady = () => {
         events: {
             onReady: e => { 
                 ytReady = true; e.target.setVolume(100);
+                
+                // FIX: If a track is cached on refresh, cue it up and restore lock-screen controls immediately
                 if (window.OCTAVE.currentIndex >= 0 && window.OCTAVE.queue.length > 0) {
-                    updatePlayerUI(window.OCTAVE.queue[window.OCTAVE.currentIndex]);
+                    const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
+                    updatePlayerUI(track);
+                    YTP.cueVideoById({ videoId: track.videoId });
+                    
+                    if ('mediaSession' in navigator) {
+                        navigator.mediaSession.metadata = new MediaMetadata({
+                            title: track.title, artist: track.author,
+                            artwork:[{ src: track.thumb, sizes: '512x512', type: 'image/jpeg' }]
+                        });
+                        navigator.mediaSession.setActionHandler('play', () => YTP.playVideo());
+                        navigator.mediaSession.setActionHandler('pause', () => YTP.pauseVideo());
+                        navigator.mediaSession.setActionHandler('nexttrack', playNextLogic);
+                        navigator.mediaSession.setActionHandler('previoustrack', window.playPrev);
+                    }
                 }
             },
             onStateChange: onYTS
@@ -405,25 +420,21 @@ window.setSleepTimer = (minutes) => {
 
 // --- AGGRESSIVE LYRICS SCRUBBER ---
 window.fetchLyrics = async (artist, title) => {
-    // 1. YouTube videos often name things "Artist - Title". Extract only the right side.
     let rawTitle = title.includes(' - ') ? title.split(' - ').slice(1).join(' - ') : title;
     
-    // 2. Eradicate absolutely all junk data from the title so it's a pure string
     const cleanTitle = rawTitle
-        .replace(/[\(\[【].*?[\)\]】]/g, '') // Remove everything inside brackets/parentheses
-        .replace(/(feat\.|ft\.|remix|official|video|music video|lyric|audio|live).*/gi, '') // Remove un-bracketed junk
-        .replace(/["']/g, '') // Remove quotes
+        .replace(/[\(\[【].*?[\)\]】]/g, '') 
+        .replace(/(feat\.|ft\.|remix|official|video|music video|lyric|audio|live).*/gi, '') 
+        .replace(/["']/g, '') 
         .trim();
         
-    // 3. Lyrics.ovh is VERY strict. Send only the PRIMARY artist.
     const cleanArtist = artist
         .replace(/ - Topic/gi, '')
         .replace(/VEVO/gi, '')
-        .split(/,|&| ft\.| feat\.| with /i)[0] // Drops secondary artists
+        .split(/,|&| ft\.| feat\.| with /i)[0] 
         .trim();
 
     try {
-        // LRCLIB is more forgiving and acts like a search engine
         const query = `${cleanArtist} ${cleanTitle}`;
         const r1 = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(query)}`);
         if (r1.ok) {
@@ -433,7 +444,6 @@ window.fetchLyrics = async (artist, title) => {
     } catch(e) { console.warn("LRCLIB fallback triggered"); }
     
     try {
-        // Lyrics.ovh is strict. Requires EXACT /Artist/Title structure
         const r2 = await fetch(`https://api.lyrics.ovh/v1/${encodeURIComponent(cleanArtist)}/${encodeURIComponent(cleanTitle)}`);
         if (r2.ok) {
             const data = await r2.json();
