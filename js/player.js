@@ -79,7 +79,7 @@ fetch('https://api.invidious.io/instances.json?sort_by=health')
             .map(inst => inst[1].uri);
         if (healthy.length > 0) window.INVIDIOUS = [...new Set([...healthy, ...window.INVIDIOUS])];
     })
-    .catch(() => console.warn('Using fallback Invidious instances'));
+    .catch(() => console.warn('Using fallback instances'));
 
 window.invIdx = Math.floor(Math.random() * window.INVIDIOUS.length);
 let YTP = null, ytReady = false, progressTimer = null, sleepTimerId = null;
@@ -159,7 +159,6 @@ function startProgressTracking() {
                 if(totTime) totTime.textContent = formatTime(total);
             }
 
-            // Synced Lyrics Engine
             if (window.activeSyncedLyrics && document.getElementById('lyrics-content')) {
                 const container = document.getElementById('lyrics-content');
                 let activeIdx = -1;
@@ -192,7 +191,7 @@ function startProgressTracking() {
                 }
             }
         }
-    }, 100); // 100ms interval for buttery smooth karaoke tracking
+    }, 100); 
 }
 
 function formatTime(seconds) {
@@ -210,10 +209,7 @@ function updateMediaSession(track) {
         artist: track.author,
         artwork:[
             { src: track.thumb, sizes: '96x96', type: 'image/jpeg' },
-            { src: track.thumb, sizes: '128x128', type: 'image/jpeg' },
-            { src: track.thumb, sizes: '192x192', type: 'image/jpeg' },
             { src: track.thumb, sizes: '256x256', type: 'image/jpeg' },
-            { src: track.thumb, sizes: '384x384', type: 'image/jpeg' },
             { src: track.thumb, sizes: '512x512', type: 'image/jpeg' }
         ]
     });
@@ -524,3 +520,25 @@ window.fetchArtistBio = async (artist) => {
     } catch(e) {}
     return "Artist biography not available in databases.";
 };
+
+// --- THIS BLOCK WAS MISSING. IT RE-WIRES ALL YOUR BUTTONS ---
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelector('.play-btn-mini')?.addEventListener('click', (e) => { e.stopPropagation(); window.togglePlay(); });
+    document.getElementById('fp-play')?.addEventListener('click', window.togglePlay);
+    document.getElementById('fp-next')?.addEventListener('click', () => { if(window.playNextLogic) window.playNextLogic(); });
+    document.getElementById('fp-prev')?.addEventListener('click', window.playPrev);
+    
+    document.getElementById('mini-like-btn')?.addEventListener('click', (e) => { 
+        e.stopPropagation(); 
+        if(window.OCTAVE.currentIndex >= 0) window.toggleLike(window.OCTAVE.queue[window.OCTAVE.currentIndex]); 
+    });
+    document.getElementById('fp-like')?.addEventListener('click', () => { 
+        if(window.OCTAVE.currentIndex >= 0) window.toggleLike(window.OCTAVE.queue[window.OCTAVE.currentIndex]); 
+    });
+
+    document.getElementById('fp-progress-container')?.addEventListener('click', (e) => seekToPosition(e, document.getElementById('fp-progress-container')));
+    document.querySelector('.mini-player')?.addEventListener('click', (e) => {
+        const rect = document.querySelector('.mini-player').getBoundingClientRect();
+        if (e.clientY - rect.top <= 10) { e.stopPropagation(); seekToPosition(e, document.querySelector('.mini-player')); }
+    });
+});
