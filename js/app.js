@@ -28,7 +28,10 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="bottom-spacer"></div>
         `,
         library: `
-            <header class="search-header" style="padding: 40px 20px 20px 20px;"><h1 class="search-title" style="font-size: 24px; font-weight: 700;">Library</h1></header>
+            <header class="search-header" style="padding: 40px 20px 20px 20px; display: flex; justify-content: space-between; align-items: center;">
+                <h1 class="search-title" style="font-size: 24px; font-weight: 700;">Library</h1>
+                <button class="icon-btn" id="open-yt-import" style="color: #ff0000; font-size: 24px;"><i class="fa-brands fa-youtube"></i></button>
+            </header>
             <div id="lib-playlists" class="vertical-list" style="padding: 20px;"></div>
             <div class="bottom-spacer"></div>
         `,
@@ -78,6 +81,9 @@ document.body.addEventListener('click', async (e) => {
         document.getElementById('side-menu').classList.remove('active');
         document.getElementById('menu-backdrop').classList.remove('active');
     }
+    if (e.target.closest('#open-yt-import')) {
+        document.getElementById('yt-import-modal').classList.add('active');
+    }
     
     const pageBtn = e.target.closest('[data-page]');
     if (pageBtn) {
@@ -119,7 +125,6 @@ const fpTitle = document.getElementById('fp-overlay-title');
 
 document.getElementById('close-fp-overlay').addEventListener('click', () => fpPanel.classList.remove('active'));
 
-// --- THIS FIXES THE [object Object] LYRICS BUG ---
 document.getElementById('fp-lyrics-btn').addEventListener('click', async () => {
     if(window.OCTAVE.currentIndex < 0) return;
     fpTitle.innerText = 'Lyrics';
@@ -255,7 +260,7 @@ window.renderHome = () => {
 function renderLibrary() {
     const lib = document.getElementById('lib-playlists');
     if(!lib) return;
-    lib.innerHTML = Object.keys(window.OCTAVE.playlists).length > 0 ? '' : '<div class="empty-state-text">Create a playlist from the Home tab.</div>';
+    lib.innerHTML = Object.keys(window.OCTAVE.playlists).length > 0 ? '' : '<div class="empty-state-text">Create or import a playlist to see it here.</div>';
     
     Object.keys(window.OCTAVE.playlists).forEach(plName => {
         const pl = window.OCTAVE.playlists[plName];
@@ -454,4 +459,88 @@ document.getElementById('opt-add-playlist').addEventListener('click', () => {
         });
     }
     plModal.classList.add('active');
+});
+
+// --- YOUTUBE PLAYLIST IMPORT LOGIC ---
+document.getElementById('close-yt-import')?.addEventListener('click', () => {
+    document.getElementById('yt-import-modal').classList.remove('active');
+    document.getElementById('yt-playlist-url').value = '';
+});
+
+document.getElementById('start-yt-import')?.addEventListener('click', async () => {
+    const urlInput = document.getElementById('yt-playlist-url').value.trim();
+    if (!urlInput) return;
+
+    // Parse the actual Playlist ID out of the full YouTube URL
+    let playlistId = '';
+    try {
+        const urlObj = new URL(urlInput);
+        playlistId = urlObj.searchParams.get('list');
+    } catch(e) {
+        if (urlInput.startsWith('PL') && urlInput.length > 15) {
+            playlistId = urlInput;
+        }
+    }
+
+    if (!playlistId) {
+        alert("Invalid YouTube Playlist URL.");
+        return;
+    }
+
+    const modal = document.getElementById('yt-import-modal');
+    const btn = document.getElementById('start-yt-import');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+    btn.disabled = true;
+
+    let success = false;
+    for (let i = 0; i < window.INVIDIOUS.length; i++) {
+        const base = window.INVIDIOUS[(window.invIdx + i) % window.INVIDIOUS.length];
+        try {
+            const r = await fetch(`${base}/api/v1/playlists/${playlistId}`);
+            if (r.ok) {
+                const data = await r.json();
+                if (data.videos && data.videos.length > 0) {
+                    const newPlaylistName = data.title || "Imported Playlist";
+                    
+                    // Prevent overwriting if you import the same playlist twice
+                    let finalName = newPlaylistName;
+                    let count = 1;
+                    while(window.OCTAVE.playlists[finalName]) {
+                        finalName = `${newPlaylistName} (${count})`;
+                        count++;
+                    }
+
+                    // Map the ripped data straight into the offline vault format
+                    window.OCTAVE.playlists[finalName] = data.videos.map(v => ({
+                        videoId: v.videoId,
+                        title: v.title,
+                        author: v.author,
+                        thumb: (v.videoThumbnails && v.videoThumbnails.length > 0) ? v.videoThumbnails[0].url : ''
+                    }));
+
+                    window.saveCache();
+                    success = true;
+                    
+                    alert(`Successfully imported ${data.videos.length} tracks to "${finalName}"!`);
+                    modal.classList.remove('active');
+                    document.getElementById('yt-playlist-url').value = '';
+                    
+                    // Refresh the Library view so it shows up instantly
+                    const activeNav = document.querySelector('.nav-item.active');
+                    if(activeNav && activeNav.getAttribute('data-tab') === 'library') {
+                        document.querySelector('.nav-item[data-tab="library"]').click(); 
+                    }
+                    break;
+                }
+            }
+        } catch (e) { continue; }
+    }
+
+    if (!success) {
+        alert("Failed to fetch playlist. Ensure the playlist is public and try again.");
+    }
+
+    btn.innerHTML = originalText;
+    btn.disabled = false;
 });
