@@ -23,7 +23,6 @@ document.addEventListener('DOMContentLoaded', () => {
             <div id="searchResults" style="padding: 20px; display: flex; flex-direction: column; gap: 12px;">
                 <div id="search-default-view">
                     <h3 style="font-size: 16px; margin-bottom: 16px;">Recently Searched</h3>
-                    <!-- Fixed Alignment Bug: padding-right: 0 prevents it from shifting left -->
                     <div class="vertical-list" id="search-recent-list" style="padding-right: 0;"></div>
                 </div>
             </div>
@@ -218,7 +217,6 @@ window.renderHome = () => {
     const recsSection = document.getElementById('recommended-section');
     if (recsGrid && recsSection) {
         if (window.OCTAVE.dailyRecs && window.OCTAVE.dailyRecs.tracks.length > 0) {
-            recsSection.style.display = 'block';
             recsGrid.innerHTML = '';
             window.OCTAVE.dailyRecs.tracks.forEach(track => {
                 const el = document.createElement('div');
@@ -227,10 +225,9 @@ window.renderHome = () => {
                 el.addEventListener('click', () => window.playTrack(track));
                 recsGrid.appendChild(el);
             });
-        } else {
-            recsSection.style.display = 'none';
         }
     }
+    
     if (window.fetchDailyRecommendations) window.fetchDailyRecommendations();
 
     const likedCount = Object.keys(window.OCTAVE.liked).length;
@@ -278,7 +275,6 @@ window.renderPlaylistDetail = (plName) => {
     const dynamicView = document.getElementById('dynamic-view');
     let totalPlays = pl.reduce((sum, track) => sum + (window.OCTAVE.playStats[track.videoId] || 0), 0);
 
-    // FIXED: Added Playlist Delete button
     dynamicView.innerHTML = `
         <div style="padding: 40px 20px 30px; background: linear-gradient(180deg, rgba(30,215,96,0.1) 0%, var(--bg-deep) 100%);">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
@@ -306,7 +302,6 @@ window.renderPlaylistDetail = (plName) => {
             el.style.cssText = 'display: flex; align-items: center; gap: 14px; padding: 12px; background: var(--bg-surface); border-radius: 8px; margin-bottom: 12px; cursor: pointer;';
             el.innerHTML = `<img src="${track.thumb}" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover;"><div style="flex: 1; min-width: 0;"><div style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${track.title}</div><div style="font-size: 12px; color: var(--text-secondary);">${track.author} • <i class="fa-solid fa-fire" style="color: #ff5000; font-size: 10px;"></i> ${stats} plays</div></div><button class="icon-btn remove-btn" style="color: #ff4444; padding: 10px; z-index: 10;"><i class="fa-solid fa-xmark"></i></button>`;
             
-            // FIXED: Added stopPropagation so trash button doesn't trigger song play
             el.addEventListener('click', (e) => {
                 const removeBtn = e.target.closest('.remove-btn');
                 if (removeBtn) { 
