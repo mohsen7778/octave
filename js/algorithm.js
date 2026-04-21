@@ -23,17 +23,20 @@ window.playNextLogic = async () => {
                     const d = await r.json();
                     if (d.recommendedVideos && d.recommendedVideos.length > 0) {
                         const recentIds = window.OCTAVE.recentPlayed.slice(0, 15).map(t => t.videoId);
-                        let freshRecs = d.recommendedVideos.filter(v => !recentIds.includes(v.videoId));
-                        if (freshRecs.length === 0) freshRecs = d.recommendedVideos;
-                        const pick = freshRecs[Math.floor(Math.random() * Math.min(3, freshRecs.length))];
+                        // STRICT 10-MINUTE FILTER
+                        let freshRecs = d.recommendedVideos.filter(v => !recentIds.includes(v.videoId) && v.lengthSeconds && v.lengthSeconds < 600);
+                        if (freshRecs.length === 0) freshRecs = d.recommendedVideos.filter(v => v.lengthSeconds && v.lengthSeconds < 600);
                         
-                        const nextTrack = {
-                            videoId: pick.videoId, title: pick.title, author: pick.author,
-                            thumb: (pick.videoThumbnails && pick.videoThumbnails.length > 0) ? pick.videoThumbnails[0].url : ''
-                        };
-                        window.OCTAVE.queue.push(nextTrack);
-                        window.playTrackByIndex(window.OCTAVE.queue.length - 1);
-                        return;
+                        if (freshRecs.length > 0) {
+                            const pick = freshRecs[Math.floor(Math.random() * Math.min(3, freshRecs.length))];
+                            const nextTrack = {
+                                videoId: pick.videoId, title: pick.title, author: pick.author,
+                                thumb: (pick.videoThumbnails && pick.videoThumbnails.length > 0) ? pick.videoThumbnails[0].url : ''
+                            };
+                            window.OCTAVE.queue.push(nextTrack);
+                            window.playTrackByIndex(window.OCTAVE.queue.length - 1);
+                            return;
+                        }
                     }
                 }
             } catch(e) { continue; }
@@ -71,9 +74,9 @@ window.fetchDailyRecommendations = async () => {
                 let newTracks =[];
 
                 if (baseTracks.length > 0 && d.recommendedVideos) {
-                    newTracks = d.recommendedVideos.slice(0, 10);
+                    newTracks = d.recommendedVideos.filter(v => v.lengthSeconds && v.lengthSeconds < 600).slice(0, 10);
                 } else if (baseTracks.length === 0 && Array.isArray(d)) {
-                    newTracks = d.slice(0, 10);
+                    newTracks = d.filter(v => v.lengthSeconds && v.lengthSeconds < 600).slice(0, 10);
                 }
 
                 if (newTracks.length > 0) {
@@ -122,7 +125,7 @@ window.generateDiscoverMix = async () => {
                 if (r.ok) {
                     const d = await r.json();
                     if (d.recommendedVideos) {
-                        d.recommendedVideos.slice(0, 6).forEach(rec => {
+                        d.recommendedVideos.filter(v => v.lengthSeconds && v.lengthSeconds < 600).slice(0, 6).forEach(rec => {
                             if(!seenIds.has(rec.videoId)) {
                                 seenIds.add(rec.videoId);
                                 newQueue.push({
