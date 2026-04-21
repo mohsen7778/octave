@@ -417,7 +417,6 @@ window.performSearch = async (query) => {
     for (let i = 0; i < window.INVIDIOUS.length; i++) {
         const base = window.INVIDIOUS[(window.invIdx + i) % window.INVIDIOUS.length];
         try {
-            // STRICT 10-MINUTE FILTER FOR SEARCH
             const r = await fetch(`${base}/api/v1/search?q=${encodeURIComponent(query)}&type=video&fields=videoId,title,author,videoThumbnails,lengthSeconds`, { signal: AbortSignal.timeout(7000) });
             if (!r.ok) continue;
             const d = await r.json(); 
@@ -533,7 +532,6 @@ window.fetchFullArtistProfile = async (artist) => {
     for (let i = 0; i < window.INVIDIOUS.length; i++) {
         const base = window.INVIDIOUS[(window.invIdx + i) % window.INVIDIOUS.length];
         try {
-            // STRICT 10 MINUTE FILTER FOR ARTIST TRACKS
             const r3 = await fetch(`${base}/api/v1/search?q=${encodeURIComponent(cleanArtist)}&type=video&sort_by=view_count&fields=videoId,title,author,videoThumbnails,lengthSeconds`, { signal: AbortSignal.timeout(7000) });
             if (r3.ok) {
                 const d = await r3.json();
