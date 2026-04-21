@@ -17,8 +17,11 @@ window.playNextLogic = async () => {
         
         for (let i = 0; i < window.INVIDIOUS.length; i++) {
             const base = window.INVIDIOUS[(window.invIdx + i) % window.INVIDIOUS.length];
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
             try {
-                const r = await fetch(`${base}/api/v1/videos/${seedTrack.videoId}?fields=recommendedVideos`, { signal: AbortSignal.timeout(5000) });
+                const r = await fetch(`${base}/api/v1/videos/${seedTrack.videoId}?fields=recommendedVideos`, { signal: controller.signal });
+                clearTimeout(timeoutId);
                 if (r.ok) {
                     const d = await r.json();
                     if (d.recommendedVideos && d.recommendedVideos.length > 0) {
@@ -58,6 +61,8 @@ window.fetchDailyRecommendations = async () => {
     
     for (let i = 0; i < window.INVIDIOUS.length; i++) {
         const base = window.INVIDIOUS[(window.invIdx + i) % window.INVIDIOUS.length];
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
         try {
             let url = '';
             if (baseTracks.length > 0) {
@@ -67,7 +72,8 @@ window.fetchDailyRecommendations = async () => {
                 url = `${base}/api/v1/popular?videoCategory=10`; 
             }
 
-            const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
+            const r = await fetch(url, { signal: controller.signal });
+            clearTimeout(timeoutId);
             if (r.ok) {
                 const d = await r.json();
                 let newTracks =[];
@@ -144,7 +150,8 @@ window.generateDiscoverMix = async () => {
         newQueue.sort(() => 0.5 - Math.random());
         window.OCTAVE.queue = newQueue;
         window.playTrackByIndex(0);
-        document.querySelector('.nav-item.active').click(); 
+        const homeTab = document.querySelector('.nav-item[data-tab="home"]');
+        if(homeTab) homeTab.click();
     } else {
         dynamicView.innerHTML = originalHTML;
         alert("Algorithm failed to connect to network. Try again.");
