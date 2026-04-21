@@ -246,6 +246,7 @@ if (fpOptionsBtn) {
     });
 }
 
+// TURBO-SYNC TRENDING ENGINE
 window.fetchTrendingMusic = async () => {
     const grid = document.getElementById('home-trending-grid');
     if (!grid) return;
@@ -272,37 +273,45 @@ window.fetchTrendingMusic = async () => {
         const data = await response.json();
         const items = data.feed.entry;
 
-        grid.innerHTML = '<div style="color: var(--text-secondary); font-size: 13px;"><i class="fa-solid fa-spinner fa-spin"></i> Refreshing Global 50...</div>';
-
         const trendingTracks = [];
-        const base = window.INVIDIOUS[window.invIdx % window.INVIDIOUS.length];
+        let count = 0;
 
-        for (const item of items) {
+        // FETCH IN PARALLEL BATCHES FOR TURBO TESTING
+        const fetchTrack = async (item) => {
             const title = item['im:name'].label;
             const artist = item['im:artist'].label;
+            
+            // Randomize instance for EVERY request to avoid rate limits
+            const base = window.INVIDIOUS[Math.floor(Math.random() * window.INVIDIOUS.length)];
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000);
+            const timeoutId = setTimeout(() => controller.abort(), 4000);
+
             try {
-                const searchRes = await fetch(`${base}/api/v1/search?q=${encodeURIComponent(artist + ' ' + title)}&type=video&fields=videoId,title,author,videoThumbnails,lengthSeconds`, { signal: controller.signal });
+                const r = await fetch(`${base}/api/v1/search?q=${encodeURIComponent(artist + ' ' + title)}&type=video&fields=videoId,title,author,videoThumbnails,lengthSeconds`, { signal: controller.signal });
                 clearTimeout(timeoutId);
-                const searchData = await searchRes.json();
-                const bestMatch = searchData.find(v => v.lengthSeconds && v.lengthSeconds < 600);
-                
-                if (bestMatch) {
-                    trendingTracks.push({
-                        videoId: bestMatch.videoId,
-                        title: bestMatch.title,
-                        author: bestMatch.author,
-                        thumb: (bestMatch.videoThumbnails && bestMatch.videoThumbnails.length > 0) ? bestMatch.videoThumbnails[0].url : ''
-                    });
+                const d = await r.json();
+                const best = d.find(v => v.lengthSeconds && v.lengthSeconds < 600);
+                if (best) {
+                    count++;
+                    grid.innerHTML = `<div style="color: var(--text-secondary); font-size: 13px;"><i class="fa-solid fa-spinner fa-spin"></i> Syncing Hits: ${count}/50</div>`;
+                    return {
+                        videoId: best.videoId, title: best.title, author: best.author,
+                        thumb: (best.videoThumbnails && best.videoThumbnails.length > 0) ? best.videoThumbnails[0].url : ''
+                    };
                 }
-            } catch (e) { continue; }
+            } catch(e) { return null; }
+        };
+
+        // Batch process 5 tracks at a time
+        for (let i = 0; i < items.length; i += 5) {
+            const batch = items.slice(i, i + 5);
+            const results = await Promise.all(batch.map(item => fetchTrack(item)));
+            results.forEach(res => { if(res) trendingTracks.push(res); });
         }
 
         if (trendingTracks.length > 0) {
             window.OCTAVE.trendingData = { timestamp: now, tracks: trendingTracks };
             window.saveCache();
-            
             grid.innerHTML = '';
             trendingTracks.forEach(track => {
                 const el = document.createElement('div');
