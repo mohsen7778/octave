@@ -9,7 +9,8 @@ window.OCTAVE = {
     queue:[], currentIndex: -1, isPlaying: false,
     liked: {}, playlists: {}, recentPlayed: [], recentSearches:[],
     playStats: {}, activeTrackForOptions: null,
-    dailyRecs: { timestamp: 0, tracks:[] }
+    dailyRecs: { timestamp: 0, tracks:[] },
+    trendingData: { timestamp: 0, tracks: [] }
 };
 
 window.saveCache = () => {
@@ -19,7 +20,8 @@ window.saveCache = () => {
         recentSearches: window.OCTAVE.recentSearches.slice(0, 30),
         playStats: window.OCTAVE.playStats, queue: window.OCTAVE.queue,
         currentIndex: window.OCTAVE.currentIndex,
-        dailyRecs: window.OCTAVE.dailyRecs
+        dailyRecs: window.OCTAVE.dailyRecs,
+        trendingData: window.OCTAVE.trendingData
     }));
 };
 
@@ -35,6 +37,7 @@ function loadCache() {
         window.OCTAVE.queue = parsed.queue ||[];
         window.OCTAVE.currentIndex = parsed.currentIndex || -1;
         window.OCTAVE.dailyRecs = parsed.dailyRecs || { timestamp: 0, tracks:[] };
+        window.OCTAVE.trendingData = parsed.trendingData || { timestamp: 0, tracks: [] };
     }
 }
 loadCache();
@@ -209,7 +212,10 @@ function updateMediaSession(track) {
         artist: track.author,
         artwork:[
             { src: track.thumb, sizes: '96x96', type: 'image/jpeg' },
+            { src: track.thumb, sizes: '128x128', type: 'image/jpeg' },
+            { src: track.thumb, sizes: '192x192', type: 'image/jpeg' },
             { src: track.thumb, sizes: '256x256', type: 'image/jpeg' },
+            { src: track.thumb, sizes: '384x384', type: 'image/jpeg' },
             { src: track.thumb, sizes: '512x512', type: 'image/jpeg' }
         ]
     });
