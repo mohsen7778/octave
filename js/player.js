@@ -699,6 +699,20 @@ window.fetchFullArtistProfile = async (artist) => {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
+
+    // Restore the last played track on startup
+    if (window.OCTAVE.currentIndex >= 0 && window.OCTAVE.queue.length > 0) {
+        const lastTrack = window.OCTAVE.queue[window.OCTAVE.currentIndex];
+        updatePlayerUI(lastTrack);
+        
+        streamQueue = buildStreamQueue(lastTrack.videoId);
+        streamQueueIdx = 0;
+        if (streamQueue.length > 0) {
+            AUDIO.src = streamQueue[0];
+            AUDIO.load();
+        }
+    }
+
     document.querySelector('.mini-player')?.addEventListener('click', (e) => {
         const rect = document.querySelector('.mini-player').getBoundingClientRect();
         if (e.clientY - rect.top <= 10) {
