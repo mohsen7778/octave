@@ -23,6 +23,7 @@ window.OCTAVE = {
         timestamp: 0,
         tracks: []
     },
+    artistCache: {},
     selectedFont: localStorage.getItem('octave_font') || 'Plus Jakarta Sans'
 };
 
@@ -36,7 +37,8 @@ window.saveCache = () => {
         queue: window.OCTAVE.queue,
         currentIndex: window.OCTAVE.currentIndex,
         dailyRecs: window.OCTAVE.dailyRecs,
-        trendingData: window.OCTAVE.trendingData
+        trendingData: window.OCTAVE.trendingData,
+        artistCache: window.OCTAVE.artistCache
     }));
 };
 
@@ -59,6 +61,7 @@ function loadCache() {
             timestamp: 0,
             tracks: []
         };
+        window.OCTAVE.artistCache = parsed.artistCache || {};
     }
 }
 loadCache();
@@ -512,7 +515,6 @@ window.fetchLyrics = async (artist, title) => {
         if (r1.ok) {
             const data = await r1.json();
             if (data && data.length > 0) {
-                // Find most accurate title match to avoid wrong song
                 const bestMatch = data.find(item =>
                     item.trackName.toLowerCase().includes(cleanTitle.toLowerCase())
                 ) || data[0];
@@ -539,12 +541,19 @@ window.fetchLyrics = async (artist, title) => {
 
 window.fetchFullArtistProfile = async (artist) => {
     const cleanArtist = artist.replace(/ - Topic/g, '').replace(/VEVO/i, '').trim();
+    
+    // Check Cache First
+    if (window.OCTAVE.artistCache && window.OCTAVE.artistCache[cleanArtist]) {
+        return window.OCTAVE.artistCache[cleanArtist];
+    }
+
     let profile = {
         name: cleanArtist,
         bio: "Artist biography not available.",
         banner: "",
         tracks: []
     };
+
     try {
         const r1 = await fetch(`https://www.theaudiodb.com/api/v1/json/2/search.php?s=${encodeURIComponent(cleanArtist)}`);
         if (r1.ok) {
@@ -557,6 +566,26 @@ window.fetchFullArtistProfile = async (artist) => {
             }
         }
     } catch (e) {}
+    
+    // Wikipedia Fallback
+    if (profile.bio === "Artist biography not available.") {
+        try {
+            const r2 = await fetch(`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(cleanArtist + " musician")}&limit=1&origin=*`);
+            if (r2.ok) {
+                const searchData = await r2.json();
+                if (searchData[2] && searchData[2][0]) {
+                    profile.bio = searchData[2][0];
+                } else {
+                    const r3 = await fetch(`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(cleanArtist)}&limit=1&origin=*`);
+                    const searchData2 = await r3.json();
+                    if (searchData2[2] && searchData2[2][0]) {
+                        profile.bio = searchData2[2][0];
+                    }
+                }
+            }
+        } catch (e) {}
+    }
+
     for (let i = 0; i < window.INVIDIOUS.length; i++) {
         const base = window.INVIDIOUS[(window.invIdx + i) % window.INVIDIOUS.length];
         const controller = new AbortController();
@@ -583,6 +612,12 @@ window.fetchFullArtistProfile = async (artist) => {
             continue;
         }
     }
+    
+    // Save to Cache
+    if (!window.OCTAVE.artistCache) window.OCTAVE.artistCache = {};
+    window.OCTAVE.artistCache[cleanArtist] = profile;
+    window.saveCache();
+
     return profile;
 };
 
