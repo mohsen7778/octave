@@ -130,7 +130,7 @@ document.getElementById('fp-lyrics-btn').addEventListener('click', async () => {
     
     const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
     const lyrics = await window.fetchLyrics(track.author, track.title);
-    fpContent.innerHTML = `<div id="lyrics-content">${lyrics}</div>`;
+    fpContent.innerHTML = `<div id="lyrics-content">${window.escapeHTML(lyrics)}</div>`;
 });
 
 // Binding the Artist Name to trigger the Bio 
@@ -142,7 +142,7 @@ document.getElementById('fp-artist').addEventListener('click', async () => {
     
     const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
     const bio = await window.fetchArtistBio(track.author);
-    fpContent.innerHTML = `<div style="color: var(--text-primary); font-size: 15px; line-height: 1.8;">${bio}</div>`;
+    fpContent.innerHTML = `<div style="color: var(--text-primary); font-size: 15px; line-height: 1.8;">${window.escapeHTML(bio)}</div>`;
 });
 
 document.getElementById('fp-queue-btn').addEventListener('click', () => {
@@ -162,8 +162,8 @@ document.getElementById('fp-queue-btn').addEventListener('click', () => {
         el.innerHTML = `
             <img src="${track.thumb}" style="width: 40px; height: 40px; border-radius: 6px; object-fit: cover;">
             <div style="flex: 1; min-width: 0;">
-                <div style="font-size: 14px; font-weight: 600; color: ${isPlaying ? 'var(--accent)' : 'var(--text-primary)'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${track.title}</div>
-                <div style="font-size: 12px; color: var(--text-secondary);">${track.author}</div>
+                <div style="font-size: 14px; font-weight: 600; color: ${isPlaying ? 'var(--accent)' : 'var(--text-primary)'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${window.escapeHTML(track.title)}</div>
+                <div style="font-size: 12px; color: var(--text-secondary);">${window.escapeHTML(track.author)}</div>
             </div>
             ${isPlaying ? '<i class="fa-solid fa-volume-high" style="color: var(--accent);"></i>' : ''}
         `;
@@ -206,7 +206,7 @@ window.renderHome = () => {
         window.OCTAVE.recentPlayed.forEach(track => {
             const el = document.createElement('div');
             el.className = 'square-card';
-            el.innerHTML = `<div class="card-art shadow-heavy" style="background-image: url('${track.thumb}'); background-size: cover;"></div><div class="card-title">${track.title}</div>`;
+            el.innerHTML = `<div class="card-art shadow-heavy" style="background-image: url('${track.thumb}'); background-size: cover;"></div><div class="card-title">${window.escapeHTML(track.title)}</div>`;
             el.addEventListener('click', () => window.playTrack(track));
             recentGrid.appendChild(el);
         });
@@ -221,7 +221,7 @@ window.renderHome = () => {
             window.OCTAVE.dailyRecs.tracks.forEach(track => {
                 const el = document.createElement('div');
                 el.className = 'square-card';
-                el.innerHTML = `<div class="card-art shadow-heavy" style="background-image: url('${track.thumb}'); background-size: cover;"></div><div class="card-title">${track.title}</div>`;
+                el.innerHTML = `<div class="card-art shadow-heavy" style="background-image: url('${track.thumb}'); background-size: cover;"></div><div class="card-title">${window.escapeHTML(track.title)}</div>`;
                 el.addEventListener('click', () => window.playTrack(track));
                 recsGrid.appendChild(el);
             });
@@ -248,7 +248,7 @@ window.renderHome = () => {
         const pl = window.OCTAVE.playlists[plName];
         const el = document.createElement('div');
         el.className = 'list-item';
-        el.innerHTML = `<div class="list-art shadow-heavy" style="background: #2a2d36; display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--text-secondary);"><i class="fa-solid fa-list"></i></div><div class="list-info"><div class="list-title">${plName}</div><div class="list-subtitle">${pl.length} tracks</div></div><button class="icon-btn" style="color: var(--text-secondary);"><i class="fa-solid fa-chevron-right"></i></button>`;
+        el.innerHTML = `<div class="list-art shadow-heavy" style="background: #2a2d36; display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--text-secondary);"><i class="fa-solid fa-list"></i></div><div class="list-info"><div class="list-title">${window.escapeHTML(plName)}</div><div class="list-subtitle">${pl.length} tracks</div></div><button class="icon-btn" style="color: var(--text-secondary);"><i class="fa-solid fa-chevron-right"></i></button>`;
         el.addEventListener('click', () => window.renderPlaylistDetail(plName));
         playlistsDiv.appendChild(el);
     });
@@ -263,7 +263,7 @@ function renderLibrary() {
         const pl = window.OCTAVE.playlists[plName];
         const el = document.createElement('div');
         el.className = 'list-item';
-        el.innerHTML = `<div class="list-art shadow-heavy" style="background: #2a2d36; display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--text-secondary);"><i class="fa-solid fa-list"></i></div><div class="list-info"><div class="list-title">${plName}</div><div class="list-subtitle">${pl.length} tracks</div></div><i class="fa-solid fa-chevron-right" style="color: var(--text-secondary);"></i>`;
+        el.innerHTML = `<div class="list-art shadow-heavy" style="background: #2a2d36; display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--text-secondary);"><i class="fa-solid fa-list"></i></div><div class="list-info"><div class="list-title">${window.escapeHTML(plName)}</div><div class="list-subtitle">${pl.length} tracks</div></div><i class="fa-solid fa-chevron-right" style="color: var(--text-secondary);"></i>`;
         el.addEventListener('click', () => window.renderPlaylistDetail(plName));
         lib.appendChild(el);
     });
@@ -280,7 +280,7 @@ window.renderPlaylistDetail = (plName) => {
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
                 <div style="display: flex; align-items: center; gap: 16px;">
                     <button class="icon-btn" onclick="document.querySelector('.nav-item.active').click()"><i class="fa-solid fa-arrow-left"></i></button>
-                    <h1 style="font-size: 28px; font-weight: 800;">${plName}</h1>
+                    <h1 style="font-size: 28px; font-weight: 800;">${window.escapeHTML(plName)}</h1>
                 </div>
                 <button class="icon-btn" onclick="window.deletePlaylist('${plName}')" style="color: #ff4444; font-size: 20px;"><i class="fa-solid fa-trash-can"></i></button>
             </div>
@@ -300,7 +300,7 @@ window.renderPlaylistDetail = (plName) => {
             const stats = window.OCTAVE.playStats[track.videoId] || 0;
             const el = document.createElement('div');
             el.style.cssText = 'display: flex; align-items: center; gap: 14px; padding: 12px; background: var(--bg-surface); border-radius: 8px; margin-bottom: 12px; cursor: pointer;';
-            el.innerHTML = `<img src="${track.thumb}" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover;"><div style="flex: 1; min-width: 0;"><div style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${track.title}</div><div style="font-size: 12px; color: var(--text-secondary);">${track.author} • <i class="fa-solid fa-fire" style="color: #ff5000; font-size: 10px;"></i> ${stats} plays</div></div><button class="icon-btn remove-btn" style="color: #ff4444; padding: 10px; z-index: 10;"><i class="fa-solid fa-xmark"></i></button>`;
+            el.innerHTML = `<img src="${track.thumb}" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover;"><div style="flex: 1; min-width: 0;"><div style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${window.escapeHTML(track.title)}</div><div style="font-size: 12px; color: var(--text-secondary);">${window.escapeHTML(track.author)} • <i class="fa-solid fa-fire" style="color: #ff5000; font-size: 10px;"></i> ${stats} plays</div></div><button class="icon-btn remove-btn" style="color: #ff4444; padding: 10px; z-index: 10;"><i class="fa-solid fa-xmark"></i></button>`;
             
             el.addEventListener('click', (e) => {
                 const removeBtn = e.target.closest('.remove-btn');
@@ -337,7 +337,7 @@ window.renderLikedSongs = () => {
             const stats = window.OCTAVE.playStats[track.videoId] || 0;
             const el = document.createElement('div');
             el.style.cssText = 'display: flex; align-items: center; gap: 14px; padding: 12px; background: var(--bg-surface); border-radius: 8px; margin-bottom: 12px; cursor: pointer;';
-            el.innerHTML = `<img src="${track.thumb}" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover;"><div style="flex: 1; min-width: 0;"><div style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${track.title}</div><div style="font-size: 12px; color: var(--text-secondary);">${track.author} • <i class="fa-solid fa-fire" style="color: #ff5000; font-size: 10px;"></i> ${stats} plays</div></div><button class="icon-btn remove-btn" style="color: var(--accent); padding: 10px; z-index: 10;"><i class="fa-solid fa-heart"></i></button>`;
+            el.innerHTML = `<img src="${track.thumb}" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover;"><div style="flex: 1; min-width: 0;"><div style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${window.escapeHTML(track.title)}</div><div style="font-size: 12px; color: var(--text-secondary);">${window.escapeHTML(track.author)} • <i class="fa-solid fa-fire" style="color: #ff5000; font-size: 10px;"></i> ${stats} plays</div></div><button class="icon-btn remove-btn" style="color: var(--accent); padding: 10px; z-index: 10;"><i class="fa-solid fa-heart"></i></button>`;
             
             el.addEventListener('click', (e) => {
                 const removeBtn = e.target.closest('.remove-btn');
@@ -393,7 +393,7 @@ function bindSearch() {
 function buildTrackItem(track) {
     const el = document.createElement('div');
     el.style.cssText = 'display: flex; align-items: center; gap: 14px; padding: 12px; background: var(--bg-surface); border-radius: 8px; margin-bottom: 12px; cursor: pointer;';
-    el.innerHTML = `<img src="${track.thumb}" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover;"><div style="flex: 1; min-width: 0;"><div style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${track.title}</div><div style="font-size: 12px; color: var(--text-secondary);">${track.author}</div></div><button class="track-opts-btn"><i class="fa-solid fa-ellipsis-vertical"></i></button>`;
+    el.innerHTML = `<img src="${track.thumb}" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover;"><div style="flex: 1; min-width: 0;"><div style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${window.escapeHTML(track.title)}</div><div style="font-size: 12px; color: var(--text-secondary);">${window.escapeHTML(track.author)}</div></div><button class="track-opts-btn"><i class="fa-solid fa-ellipsis-vertical"></i></button>`;
     el.addEventListener('click', (e) => { if(e.target.closest('.track-opts-btn')) return; window.playTrack(track); });
     el.querySelector('.track-opts-btn').addEventListener('click', (e) => { e.stopPropagation(); openTrackOptions(track); });
     return el;
@@ -426,7 +426,7 @@ function bindHomeModals() {
 function openTrackOptions(track) {
     window.OCTAVE.activeTrackForOptions = track;
     const modal = document.getElementById('track-options-modal');
-    document.getElementById('opt-track-info').innerHTML = `<img src="${track.thumb}" style="width: 40px; height: 40px; border-radius: 6px;"><div style="font-size: 14px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden;">${track.title}</div>`;
+    document.getElementById('opt-track-info').innerHTML = `<img src="${track.thumb}" style="width: 40px; height: 40px; border-radius: 6px;"><div style="font-size: 14px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden;">${window.escapeHTML(track.title)}</div>`;
     const isLiked = !!window.OCTAVE.liked[track.videoId];
     document.getElementById('opt-like-track').innerHTML = isLiked ? '<i class="fa-solid fa-heart" style="color:var(--accent);"></i> <span>Unlike Track</span>' : '<i class="fa-regular fa-heart"></i> <span>Like Track</span>';
     modal.classList.add('active');
@@ -445,7 +445,7 @@ document.getElementById('opt-add-playlist').addEventListener('click', () => {
     } else {
         list.innerHTML = '';
         Object.keys(window.OCTAVE.playlists).forEach(plName => {
-            const el = document.createElement('div'); el.className = 'drawer-item'; el.innerHTML = `<i class="fa-solid fa-list"></i> <span>${plName}</span>`;
+            const el = document.createElement('div'); el.className = 'drawer-item'; el.innerHTML = `<i class="fa-solid fa-list"></i> <span>${window.escapeHTML(plName)}</span>`;
             el.addEventListener('click', () => {
                 window.OCTAVE.playlists[plName].push(window.OCTAVE.activeTrackForOptions);
                 localStorage.setItem('octave_data', JSON.stringify({ ...JSON.parse(localStorage.getItem('octave_data')||'{}'), playlists: window.OCTAVE.playlists }));
