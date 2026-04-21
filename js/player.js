@@ -142,8 +142,16 @@ function startSilentKeepAlive() {
     if (_silentNode) return; // already running
     try {
         _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        // Rule: if the browser ever suspends this context, resume it immediately.
+        // This keeps our audio session alive permanently — no retries, no fighting.
+        _audioCtx.onstatechange = () => {
+            if (_audioCtx && _audioCtx.state === 'suspended') {
+                _audioCtx.resume();
+            }
+        };
+
         const buffer = _audioCtx.createBuffer(1, _audioCtx.sampleRate, _audioCtx.sampleRate);
-        // Buffer stays all zeros — truly silent
         const source = _audioCtx.createBufferSource();
         source.buffer = buffer;
         source.loop = true;
@@ -157,42 +165,11 @@ function startSilentKeepAlive() {
 
 function stopSilentKeepAlive() {
     try {
+        if (_audioCtx) _audioCtx.onstatechange = null;
         if (_silentNode) { _silentNode.stop(); _silentNode = null; }
         if (_audioCtx) { _audioCtx.close(); _audioCtx = null; }
     } catch (e) {}
 }
-
-// ─── BACKGROUND PLAY: VISIBILITY OVERRIDE ─────────────────────────────────────
-// YouTube iframe auto-pauses when document.hidden becomes true (tab backgrounded).
-// We counter it by firing playVideo() just after YouTube's own pause triggers.
-// Retries for 5 seconds in case YouTube keeps fighting back.
-let _bgRetryInterval = null;
-
-document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-        if (window.OCTAVE.isPlaying && YTP) {
-            let retries = 0;
-            clearInterval(_bgRetryInterval);
-            _bgRetryInterval = setInterval(() => {
-                if (!document.hidden || retries >= 10) {
-                    clearInterval(_bgRetryInterval);
-                    return;
-                }
-                try {
-                    const state = YTP.getPlayerState();
-                    // YT.PlayerState.PAUSED === 2
-                    if (state === 2 && window.OCTAVE.isPlaying) {
-                        YTP.playVideo();
-                    }
-                } catch (e) {}
-                retries++;
-            }, 500);
-        }
-    } else {
-        // Tab came back to foreground — stop retrying
-        clearInterval(_bgRetryInterval);
-    }
-});
 
 // Web Audio Context must be resumed after a user gesture (browser policy).
 // We hook into the first real play action to activate it.
