@@ -1,7 +1,8 @@
 window.OCTAVE = {
     queue:[], currentIndex: -1, isPlaying: false,
     liked: {}, playlists: {}, recentPlayed: [], recentSearches:[],
-    playStats: {}, activeTrackForOptions: null
+    playStats: {}, activeTrackForOptions: null,
+    dailyRecs: { timestamp: 0, tracks:[] } // NEW: Recommendation cache
 };
 
 function saveCache() {
@@ -10,7 +11,8 @@ function saveCache() {
         recentPlayed: window.OCTAVE.recentPlayed.slice(0, 30),
         recentSearches: window.OCTAVE.recentSearches.slice(0, 30),
         playStats: window.OCTAVE.playStats, queue: window.OCTAVE.queue,
-        currentIndex: window.OCTAVE.currentIndex
+        currentIndex: window.OCTAVE.currentIndex,
+        dailyRecs: window.OCTAVE.dailyRecs
     }));
 }
 
@@ -25,6 +27,7 @@ function loadCache() {
         window.OCTAVE.playStats = parsed.playStats || {};
         window.OCTAVE.queue = parsed.queue ||[];
         window.OCTAVE.currentIndex = parsed.currentIndex || -1;
+        window.OCTAVE.dailyRecs = parsed.dailyRecs || { timestamp: 0, tracks:[] };
     }
 }
 loadCache();
@@ -80,7 +83,6 @@ window.onYouTubeIframeAPIReady = () => {
             onReady: e => { 
                 ytReady = true; e.target.setVolume(100);
                 
-                // FIX: If a track is cached on refresh, cue it up and restore lock-screen controls immediately
                 if (window.OCTAVE.currentIndex >= 0 && window.OCTAVE.queue.length > 0) {
                     const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
                     updatePlayerUI(track);
@@ -194,7 +196,6 @@ window.playPrev = () => {
     else if (window.OCTAVE.currentIndex > 0) { window.playTrackByIndex(window.OCTAVE.currentIndex - 1); }
 };
 
-// --- ADVANCED TASTE PROFILE AUTO-DJ ALGORITHM ---
 async function playNextLogic() {
     if (window.OCTAVE.currentIndex < window.OCTAVE.queue.length - 1) {
         window.playTrackByIndex(window.OCTAVE.currentIndex + 1);
@@ -202,19 +203,15 @@ async function playNextLogic() {
         let seedTrack = window.OCTAVE.queue[window.OCTAVE.currentIndex];
         if (!seedTrack) return;
         
-        // Taste Weighting: Stop drifting too far from user's actual taste
         const likedKeys = Object.keys(window.OCTAVE.liked);
         const recentTracks = window.OCTAVE.recentPlayed;
         const rand = Math.random();
         
         if (rand < 0.3 && likedKeys.length > 0) {
-            // 30% chance: Pivot recommendations off a random Liked song
             seedTrack = window.OCTAVE.liked[likedKeys[Math.floor(Math.random() * likedKeys.length)]];
         } else if (rand < 0.5 && recentTracks.length > 0) {
-            // 20% chance: Pivot recommendations off a Recently Played song
             seedTrack = recentTracks[Math.floor(Math.random() * recentTracks.length)];
         }
-        // 50% chance: Stick to the currently playing song to maintain current mood/flow
         
         for (let i = 0; i < INVIDIOUS.length; i++) {
             const base = INVIDIOUS[(invIdx + i) % INVIDIOUS.length];
@@ -223,13 +220,9 @@ async function playNextLogic() {
                 if (r.ok) {
                     const d = await r.json();
                     if (d.recommendedVideos && d.recommendedVideos.length > 0) {
-                        
-                        // Prevent loops: Filter out tracks played recently
                         const recentIds = window.OCTAVE.recentPlayed.slice(0, 15).map(t => t.videoId);
                         let freshRecs = d.recommendedVideos.filter(v => !recentIds.includes(v.videoId));
                         if (freshRecs.length === 0) freshRecs = d.recommendedVideos;
-                        
-                        // Pick randomly from the top 3 recommendations for variety
                         const pick = freshRecs[Math.floor(Math.random() * Math.min(3, freshRecs.length))];
                         
                         const nextTrack = {
@@ -247,7 +240,46 @@ async function playNextLogic() {
 }
 window.playNext = playNextLogic;
 
-// --- DISCOVER MIX GENERATOR ---
+// --- 5-DAY RECOMMENDATION ENGINE ---
+window.fetchDailyRecommendations = async () => {
+    if (!window.OCTAVE) return;
+    const now = Date.now();
+    const FIVE_DAYS = 5 * 24 * 60 * 60 * 1000;
+    
+    if (window.OCTAVE.dailyRecs && window.OCTAVE.dailyRecs.tracks && window.OCTAVE.dailyRecs.tracks.length > 0) {
+        if (now - window.OCTAVE.dailyRecs.timestamp < FIVE_DAYS) return; 
+    }
+    
+    const baseTracks =[...Object.values(window.OCTAVE.liked), ...window.OCTAVE.recentPlayed].slice(0, 20);
+    if (baseTracks.length === 0) return;
+    
+    const seed = baseTracks[Math.floor(Math.random() * baseTracks.length)];
+    for (let i = 0; i < INVIDIOUS.length; i++) {
+        const base = INVIDIOUS[(invIdx + i) % INVIDIOUS.length];
+        try {
+            const r = await fetch(`${base}/api/v1/videos/${seed.videoId}?fields=recommendedVideos`, { signal: AbortSignal.timeout(5000) });
+            if (r.ok) {
+                const d = await r.json();
+                if (d.recommendedVideos && d.recommendedVideos.length > 0) {
+                    window.OCTAVE.dailyRecs = {
+                        timestamp: now,
+                        tracks: d.recommendedVideos.slice(0, 10).map(rec => ({
+                            videoId: rec.videoId, title: rec.title, author: rec.author,
+                            thumb: (rec.videoThumbnails && rec.videoThumbnails.length > 0) ? rec.videoThumbnails[0].url : ''
+                        }))
+                    };
+                    saveCache();
+                    const activeTab = document.querySelector('.nav-item.active');
+                    if(activeTab && activeTab.getAttribute('data-tab') === 'home') {
+                        window.renderHome();
+                    }
+                    break;
+                }
+            }
+        } catch(e) { continue; }
+    }
+};
+
 window.generateDiscoverMix = async () => {
     const baseTracks =[...Object.values(window.OCTAVE.liked), ...window.OCTAVE.recentPlayed.slice(0, 10)];
     if (baseTracks.length === 0) {
@@ -303,7 +335,7 @@ window.generateDiscoverMix = async () => {
 
 window.playPlaylist = (plName) => {
     const pl = window.OCTAVE.playlists[plName];
-    if (pl && pl.length > 0) { window.OCTAVE.queue = [...pl]; window.playTrackByIndex(0); }
+    if (pl && pl.length > 0) { window.OCTAVE.queue =[...pl]; window.playTrackByIndex(0); }
 };
 
 window.smartShufflePlaylist = (plName) => {
@@ -316,6 +348,16 @@ window.smartShufflePlaylist = (plName) => {
             return 0.5 - Math.random(); 
         });
         window.OCTAVE.queue = sorted; window.playTrackByIndex(0);
+    }
+};
+
+// FIXED: Remove Playlist Functionality added
+window.deletePlaylist = (plName) => {
+    if (confirm(`Are you sure you want to permanently delete "${plName}"?`)) {
+        delete window.OCTAVE.playlists[plName];
+        saveCache();
+        const activeNav = document.querySelector('.nav-item.active');
+        if (activeNav) activeNav.click();
     }
 };
 
@@ -350,7 +392,6 @@ function updatePlayerUI(track) {
     if(els.fA) els.fA.innerHTML = `${track.author} <i class="fa-solid fa-chevron-right" style="font-size: 10px; margin-left: 4px;"></i>`;
     if(els.fArt) { els.fArt.src = track.thumb; els.fArt.style.display = 'block'; }
     
-    // Ambient Background Update
     const ambientBg = document.getElementById('fp-ambient-bg');
     if(ambientBg) ambientBg.style.backgroundImage = `url(${track.thumb})`;
 
@@ -418,7 +459,6 @@ window.setSleepTimer = (minutes) => {
     }, minutes * 60000);
 };
 
-// --- AGGRESSIVE LYRICS SCRUBBER ---
 window.fetchLyrics = async (artist, title) => {
     let rawTitle = title.includes(' - ') ? title.split(' - ').slice(1).join(' - ') : title;
     
@@ -477,15 +517,12 @@ window.fetchArtistBio = async (artist) => {
     return "Artist biography not available in databases.";
 };
 
-// SAFETY WRAPPER: Attach all click listeners ONLY when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    // Basic Controls
     document.querySelector('.play-btn-mini')?.addEventListener('click', (e) => { e.stopPropagation(); window.togglePlay(); });
     document.getElementById('fp-play')?.addEventListener('click', window.togglePlay);
     document.getElementById('fp-next')?.addEventListener('click', playNextLogic);
     document.getElementById('fp-prev')?.addEventListener('click', window.playPrev);
     
-    // Likes
     document.getElementById('mini-like-btn')?.addEventListener('click', (e) => { 
         e.stopPropagation(); 
         if(window.OCTAVE.currentIndex >= 0) window.toggleLike(window.OCTAVE.queue[window.OCTAVE.currentIndex]); 
@@ -494,7 +531,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if(window.OCTAVE.currentIndex >= 0) window.toggleLike(window.OCTAVE.queue[window.OCTAVE.currentIndex]); 
     });
 
-    // Seeking
     document.getElementById('fp-progress-container')?.addEventListener('click', (e) => seekToPosition(e, document.getElementById('fp-progress-container')));
     document.querySelector('.mini-player')?.addEventListener('click', (e) => {
         const rect = document.querySelector('.mini-player').getBoundingClientRect();
