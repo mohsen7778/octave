@@ -495,7 +495,6 @@ window.setSleepTimer = (minutes) => {
     }, minutes * 60000);
 };
 
-// CLEAN STATIC LYRICS (NO AUTO-SYNC)
 window.fetchLyrics = async (artist, title) => {
     const cleanTitle = title
         .replace(/[\(\[【].*?[\)\]】]/g, '')
@@ -542,9 +541,12 @@ window.fetchLyrics = async (artist, title) => {
 window.fetchFullArtistProfile = async (artist) => {
     const cleanArtist = artist.replace(/ - Topic/g, '').replace(/VEVO/i, '').trim();
     
-    // Check Cache First
+    // CACHE BYPASS: If the saved cache says "Not available", ignore it and fetch fresh
     if (window.OCTAVE.artistCache && window.OCTAVE.artistCache[cleanArtist]) {
-        return window.OCTAVE.artistCache[cleanArtist];
+        const cachedProfile = window.OCTAVE.artistCache[cleanArtist];
+        if (cachedProfile.bio !== "Artist biography not available.") {
+            return cachedProfile;
+        }
     }
 
     let profile = {
@@ -567,16 +569,16 @@ window.fetchFullArtistProfile = async (artist) => {
         }
     } catch (e) {}
     
-    // Wikipedia Fallback
+    // WIKIPEDIA FALLBACK
     if (profile.bio === "Artist biography not available.") {
         try {
-            const r2 = await fetch(`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(cleanArtist + " musician")}&limit=1&origin=*`);
+            const r2 = await fetch(`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(cleanArtist)}&limit=1&origin=*`);
             if (r2.ok) {
                 const searchData = await r2.json();
-                if (searchData[2] && searchData[2][0]) {
+                if (searchData[2] && searchData[2][0] && !searchData[2][0].includes("may refer to")) {
                     profile.bio = searchData[2][0];
                 } else {
-                    const r3 = await fetch(`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(cleanArtist)}&limit=1&origin=*`);
+                    const r3 = await fetch(`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(cleanArtist + " musician")}&limit=1&origin=*`);
                     const searchData2 = await r3.json();
                     if (searchData2[2] && searchData2[2][0]) {
                         profile.bio = searchData2[2][0];
