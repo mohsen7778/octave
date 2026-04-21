@@ -23,7 +23,6 @@
         <main class="main-content scroll-y" id="dynamic-view">
             <header class="app-header">
                 <div class="greeting">
-                    <!-- Increased logo size to 44px and used line-height trick for perfect alignment -->
                     <div style="display: flex; align-items: center; gap: 12px;">
                         <img src="logo.png" alt="Logo" style="width: 44px; height: 44px; border-radius: 12px; object-fit: cover; box-shadow: var(--shadow-soft);" onerror="this.style.display='none'">
                         <h1 id="time-greeting" style="margin: 0; line-height: 44px; font-size: 24px;">Good evening</h1>
@@ -46,10 +45,12 @@
                 </div>
             </section>
 
-            <!-- NEW RECOMMENDED ALGORITHM SECTION -->
-            <section class="content-section" id="recommended-section" style="display: none;">
+            <!-- RECOMMENDED SECTION (Now always visible) -->
+            <section class="content-section" id="recommended-section">
                 <h2 class="section-title">Recommended For You</h2>
-                <div class="horizontal-scroll scroll-x" id="home-recs-grid"></div>
+                <div class="horizontal-scroll scroll-x" id="home-recs-grid">
+                    <div style="color: var(--text-secondary); font-size: 13px; padding-bottom: 20px;"><i class="fa-solid fa-spinner fa-spin"></i> Finding your vibe...</div>
+                </div>
             </section>
 
             <section class="content-section">
