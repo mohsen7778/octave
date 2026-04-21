@@ -125,6 +125,7 @@ const fpTitle = document.getElementById('fp-overlay-title');
 
 document.getElementById('close-fp-overlay').addEventListener('click', () => fpPanel.classList.remove('active'));
 
+// ONLY ONE EVENT LISTENER FOR LYRICS
 document.getElementById('fp-lyrics-btn').addEventListener('click', async () => {
     if(window.OCTAVE.currentIndex < 0) return;
     fpTitle.innerText = 'Lyrics';
@@ -199,6 +200,55 @@ window.renderArtistPage = async (artistName) => {
     }
 };
 
+// ONLY ONE EVENT LISTENER FOR ARTIST PAGE
+document.getElementById('fp-artist').addEventListener('click', () => {
+    if(window.OCTAVE.currentIndex < 0) return;
+    const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
+    window.renderArtistPage(track.author);
+});
+
+// ONLY ONE EVENT LISTENER FOR QUEUE BUTTON
+document.getElementById('fp-queue-btn').addEventListener('click', () => {
+    if(window.OCTAVE.currentIndex < 0) return;
+    fpTitle.innerText = 'Up Next';
+    fpContent.innerHTML = '';
+    fpPanel.classList.add('active');
+    
+    const q = window.OCTAVE.queue;
+    const curr = window.OCTAVE.currentIndex;
+    
+    for(let i = curr; i < q.length; i++) {
+        const track = q[i];
+        const isPlaying = i === curr;
+        const el = document.createElement('div');
+        el.style.cssText = `display: flex; align-items: center; gap: 14px; padding: 12px; background: ${isPlaying ? 'rgba(30,215,96,0.1)' : 'var(--bg-surface)'}; border-radius: 8px; margin-bottom: 12px; border: ${isPlaying ? '1px solid var(--accent)' : '1px solid transparent'};`;
+        el.innerHTML = `
+            <img src="${track.thumb}" style="width: 40px; height: 40px; border-radius: 6px; object-fit: cover;">
+            <div style="flex: 1; min-width: 0;">
+                <div style="font-size: 14px; font-weight: 600; color: ${isPlaying ? 'var(--accent)' : 'var(--text-primary)'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${window.escapeHTML(track.title)}</div>
+                <div style="font-size: 12px; color: var(--text-secondary);">${window.escapeHTML(track.author)}</div>
+            </div>
+            ${isPlaying ? '<i class="fa-solid fa-volume-high" style="color: var(--accent);"></i>' : ''}
+        `;
+        fpContent.appendChild(el);
+    }
+});
+
+document.getElementById('opt-sleep-timer').addEventListener('click', () => {
+    document.getElementById('track-options-modal').classList.remove('active');
+    document.getElementById('timer-modal').classList.add('active');
+});
+document.getElementById('close-timer').addEventListener('click', () => document.getElementById('timer-modal').classList.remove('active'));
+
+const fpOptionsBtn = document.getElementById('fp-options');
+if (fpOptionsBtn) {
+    fpOptionsBtn.addEventListener('click', () => {
+        if (window.OCTAVE && window.OCTAVE.currentIndex >= 0) {
+            openTrackOptions(window.OCTAVE.queue[window.OCTAVE.currentIndex]);
+        }
+    });
+}
+
 window.fetchTrendingMusic = async () => {
     const grid = document.getElementById('home-trending-grid');
     if (!grid) return;
@@ -206,12 +256,13 @@ window.fetchTrendingMusic = async () => {
     for (let i = 0; i < window.INVIDIOUS.length; i++) {
         const base = window.INVIDIOUS[(window.invIdx + i) % window.INVIDIOUS.length];
         try {
-            const r = await fetch(`${base}/api/v1/trending?type=Music`, { signal: AbortSignal.timeout(7000) });
+            // STRICT 10 MINUTE FILTER FOR TRENDING TO PREVENT DJ MIXES AND 2 HOUR COMPILATIONS
+            const r = await fetch(`${base}/api/v1/trending?type=Music&fields=videoId,title,author,videoThumbnails,lengthSeconds`, { signal: AbortSignal.timeout(7000) });
             if (r.ok) {
                 const d = await r.json();
                 if (d && d.length > 0) {
                     grid.innerHTML = '';
-                    d.slice(0, 15).forEach(track => {
+                    d.filter(track => track.lengthSeconds && track.lengthSeconds < 600).slice(0, 15).forEach(track => {
                         const el = document.createElement('div');
                         el.className = 'square-card';
                         const thumb = (track.videoThumbnails && track.videoThumbnails.length > 0) ? track.videoThumbnails[0].url : '';
@@ -365,9 +416,9 @@ window.renderLikedSongs = () => {
 
     dynamicView.innerHTML = `
         <div style="padding: 40px 20px 30px; background: linear-gradient(180deg, rgba(30,215,96,0.15) 0%, var(--bg-deep) 100%);">
-            <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 24px;"><button class=\"icon-btn\" onclick=\"document.querySelector('.nav-item.active').click()\"><i class=\"fa-solid fa-arrow-left\"></i></button><h1 style=\"font-size: 28px; font-weight: 800;\">Liked Songs</h1></div>
+            <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 24px;"><button class="icon-btn" onclick="document.querySelector('.nav-item.active').click()"><i class="fa-solid fa-arrow-left"></i></button><h1 style="font-size: 28px; font-weight: 800;">Liked Songs</h1></div>
             <div style="color: var(--text-secondary); font-size: 14px; margin-bottom: 24px;">${pl.length} tracks • ${totalPlays} lifetime plays</div>
-            <div style="display: flex; gap: 12px;"><button class=\"btn-primary\" onclick=\"window.OCTAVE.queue = Object.values(window.OCTAVE.liked); if(window.OCTAVE.queue.length>0) window.playTrackByIndex(0);\" style=\"flex: 1; padding: 14px; border-radius: 100px; display: flex; align-items: center; justify-content: center; gap: 8px;\"><i class=\"fa-solid fa-play\"></i> Play All</button></div>
+            <div style="display: flex; gap: 12px;"><button class="btn-primary" onclick="window.OCTAVE.queue = Object.values(window.OCTAVE.liked); if(window.OCTAVE.queue.length>0) window.playTrackByIndex(0);" style="flex: 1; padding: 14px; border-radius: 100px; display: flex; align-items: center; justify-content: center; gap: 8px;"><i class="fa-solid fa-play"></i> Play All</button></div>
         </div>
         <div class="vertical-list" id="playlist-detail-list" style="padding: 0 20px;"></div>
         <div class="bottom-spacer"></div>
