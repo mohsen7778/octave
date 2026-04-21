@@ -203,6 +203,19 @@
                 <button class="btn-secondary" style="width: 100%;" id="close-select-playlist">Cancel</button>
             </div>
         </div>
+
+        <div class="modal-overlay" id="yt-import-modal">
+            <div class="modal-content glass-panel shadow-heavy">
+                <h3 style="margin-bottom: 16px;">Import YouTube Playlist</h3>
+                <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px;">Paste a public YouTube playlist URL. The algorithm will rip the tracks directly to your vault.</p>
+                <input type="text" id="yt-playlist-url" class="modern-input" placeholder="https://youtube.com/playlist?list=..." autocomplete="off">
+                <div class="modal-actions" style="margin-top: 24px;">
+                    <button class="btn-secondary" id="close-yt-import">Cancel</button>
+                    <button class="btn-primary" id="start-yt-import" style="color: var(--bg-deep);"><i class="fa-brands fa-youtube" style="margin-right: 6px;"></i> Import</button>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script src="js/algorithm.js"></script>
