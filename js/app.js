@@ -250,12 +250,30 @@ window.fetchTrendingMusic = async () => {
     const grid = document.getElementById('home-trending-grid');
     if (!grid) return;
     
+    const THREE_DAYS = 3 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+
+    // Check Vault Cache for 3-day rule
+    if (window.OCTAVE.trendingData && window.OCTAVE.trendingData.tracks.length > 0) {
+        if (now - window.OCTAVE.trendingData.timestamp < THREE_DAYS) {
+            grid.innerHTML = '';
+            window.OCTAVE.trendingData.tracks.forEach(track => {
+                const el = document.createElement('div');
+                el.className = 'square-card';
+                el.innerHTML = `<div class="card-art shadow-heavy" style="background-image: url('${track.thumb}'); background-size: cover;"></div><div class="card-title">${window.escapeHTML(track.title)}</div>`;
+                el.addEventListener('click', () => window.playTrack(track));
+                grid.appendChild(el);
+            });
+            return;
+        }
+    }
+    
     try {
-        const response = await fetch('https://itunes.apple.com/us/rss/topsongs/limit=15/json');
+        const response = await fetch('https://itunes.apple.com/us/rss/topsongs/limit=50/json');
         const data = await response.json();
         const items = data.feed.entry;
 
-        grid.innerHTML = '<div style="color: var(--text-secondary); font-size: 13px;"><i class="fa-solid fa-spinner fa-spin"></i> Syncing Top Hits...</div>';
+        grid.innerHTML = '<div style="color: var(--text-secondary); font-size: 13px;"><i class="fa-solid fa-spinner fa-spin"></i> Refreshing Global 50...</div>';
 
         const trendingTracks = [];
         const base = window.INVIDIOUS[window.invIdx % window.INVIDIOUS.length];
@@ -281,6 +299,9 @@ window.fetchTrendingMusic = async () => {
         }
 
         if (trendingTracks.length > 0) {
+            window.OCTAVE.trendingData = { timestamp: now, tracks: trendingTracks };
+            window.saveCache();
+            
             grid.innerHTML = '';
             trendingTracks.forEach(track => {
                 const el = document.createElement('div');
@@ -446,7 +467,7 @@ window.renderLikedSongs = () => {
             const stats = window.OCTAVE.playStats[track.videoId] || 0;
             const el = document.createElement('div');
             el.style.cssText = 'display: flex; align-items: center; gap: 14px; padding: 12px; background: var(--bg-surface); border-radius: 8px; margin-bottom: 12px; cursor: pointer;';
-            el.innerHTML = `<img src="${track.thumb}" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover;"><div style="flex: 1; min-width: 0;"><div style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${window.escapeHTML(track.title)}</div><div style="font-size: 12px; color: var(--text-secondary);">${window.escapeHTML(track.author)} • <i class="fa-solid fa-fire" style="color: #ff5000; font-size: 10px;"></i> ${stats} plays</div></div><button class="icon-btn remove-btn" style="color: #ff4444; padding: 10px; z-index: 10;"><i class="fa-solid fa-heart"></i></button>`;
+            el.innerHTML = `<img src="${track.thumb}" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover;"><div style="flex: 1; min-width: 0;"><div style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${window.escapeHTML(track.title)}</div><div style="font-size: 12px; color: var(--text-secondary);">${window.escapeHTML(track.author)} • <i class="fa-solid fa-fire" style="color: #ff5000; font-size: 10px;"></i> ${stats} plays</div></div><button class="icon-btn remove-btn" style="color: var(--accent); padding: 10px; z-index: 10;"><i class="fa-solid fa-heart"></i></button>`;
             
             el.addEventListener('click', (e) => {
                 const removeBtn = e.target.closest('.remove-btn');
