@@ -498,30 +498,44 @@ window.fetchLyrics = async (artist, title) => {
     return { isSynced: false, html: "Lyrics not available in open-source databases." };
 };
 
-window.fetchArtistBio = async (artist) => {
+// --- UPGRADED: Artist Profile Fetcher ---
+window.fetchArtistProfileData = async (artist) => {
     const cleanArtist = artist.replace(/ - Topic/g, '').replace(/VEVO/i, '').trim();
+    let profile = { name: cleanArtist, bio: "Biography not available in open-source databases.", banner: "", topTracks: [] };
+
     try {
         const r1 = await fetch(`https://www.theaudiodb.com/api/v1/json/2/search.php?s=${encodeURIComponent(cleanArtist)}`);
         if (r1.ok) {
             const data = await r1.json();
-            if (data.artists && data.artists[0].strBiographyEN) {
-                let bio = data.artists[0].strBiographyEN;
-                if(bio.length > 1000) bio = bio.substring(0, 1000) + "...";
-                return bio;
+            if (data.artists && data.artists[0]) {
+                const art = data.artists[0];
+                if (art.strBiographyEN) {
+                    profile.bio = art.strBiographyEN.length > 1000 ? art.strBiographyEN.substring(0, 1000) + "..." : art.strBiographyEN;
+                }
+                profile.banner = art.strArtistBanner || art.strArtistFanart || art.strArtistThumb || "";
             }
         }
     } catch(e) {}
+
+    if (profile.bio.includes("not available")) {
+        try {
+            const r2 = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleanArtist)}`);
+            if (r2.ok) {
+                const data = await r2.json();
+                if (data.extract) profile.bio = data.extract;
+            }
+        } catch(e) {}
+    }
+
     try {
-        const r2 = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleanArtist)}`);
-        if (r2.ok) {
-            const data = await r2.json();
-            if (data.extract) return data.extract;
-        }
+        // Rip the top 5 official tracks using the built-in dynamic search!
+        const results = await window.performSearch(`${cleanArtist} official music`);
+        profile.topTracks = results.slice(0, 5);
     } catch(e) {}
-    return "Artist biography not available in databases.";
+
+    return profile;
 };
 
-// --- THIS BLOCK WAS MISSING. IT RE-WIRES ALL YOUR BUTTONS ---
 document.addEventListener('DOMContentLoaded', () => {
     document.querySelector('.play-btn-mini')?.addEventListener('click', (e) => { e.stopPropagation(); window.togglePlay(); });
     document.getElementById('fp-play')?.addEventListener('click', window.togglePlay);
