@@ -12,7 +12,7 @@ window.OCTAVE = {
     dailyRecs: { timestamp: 0, tracks:[] }
 };
 
-function saveCache() {
+window.saveCache = () => {
     localStorage.setItem('octave_data', JSON.stringify({
         liked: window.OCTAVE.liked, playlists: window.OCTAVE.playlists,
         recentPlayed: window.OCTAVE.recentPlayed.slice(0, 30),
@@ -21,7 +21,7 @@ function saveCache() {
         currentIndex: window.OCTAVE.currentIndex,
         dailyRecs: window.OCTAVE.dailyRecs
     }));
-}
+};
 
 function loadCache() {
     const data = localStorage.getItem('octave_data');
@@ -65,24 +65,23 @@ window.importVault = (event) => {
     reader.readAsText(file);
 };
 
-let INVIDIOUS =[
+window.INVIDIOUS =[
     'https://inv.nadeko.net', 'https://invidious.privacyredirect.com',
     'https://invidious.nerdvpn.de', 'https://iv.melmac.space', 
     'https://invidious.io.lol', 'https://invidious.lunar.icu'
 ];
 
-// Dynamically fetch healthy instances on load
 fetch('https://api.invidious.io/instances.json?sort_by=health')
     .then(res => res.json())
     .then(data => {
         const healthy = data
             .filter(inst => inst[1].type === 'https' && inst[1].api === true)
             .map(inst => inst[1].uri);
-        if (healthy.length > 0) INVIDIOUS = [...new Set([...healthy, ...INVIDIOUS])];
+        if (healthy.length > 0) window.INVIDIOUS = [...new Set([...healthy, ...window.INVIDIOUS])];
     })
     .catch(() => console.warn('Using fallback Invidious instances'));
 
-let invIdx = Math.floor(Math.random() * INVIDIOUS.length);
+window.invIdx = Math.floor(Math.random() * window.INVIDIOUS.length);
 let YTP = null, ytReady = false, progressTimer = null, sleepTimerId = null;
 
 const script = document.createElement('script');
@@ -126,7 +125,7 @@ function onYTS(e) {
         clearInterval(progressTimer);
     } else if (e.data === YT.PlayerState.ENDED) {
         window.OCTAVE.isPlaying = false;
-        playNextLogic();
+        if(window.playNextLogic) window.playNextLogic();
     }
 }
 
@@ -159,8 +158,41 @@ function startProgressTracking() {
                 if(currTime) currTime.textContent = formatTime(current);
                 if(totTime) totTime.textContent = formatTime(total);
             }
+
+            // Synced Lyrics Engine
+            if (window.activeSyncedLyrics && document.getElementById('lyrics-content')) {
+                const container = document.getElementById('lyrics-content');
+                let activeIdx = -1;
+                for (let i = 0; i < window.activeSyncedLyrics.length; i++) {
+                    if (current >= window.activeSyncedLyrics[i].time) activeIdx = i;
+                    else break;
+                }
+                
+                if (activeIdx !== -1 && activeIdx !== window.lastLyricIdx) {
+                    window.lastLyricIdx = activeIdx;
+                    Array.from(container.children).forEach((child, idx) => {
+                        if (idx === activeIdx) {
+                            child.style.color = '#ffffff';
+                            child.style.opacity = '1';
+                            child.style.transform = 'scale(1.15)';
+                            child.style.textShadow = '0 0 15px rgba(255,255,255,0.4)';
+                            child.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        } else if (idx < activeIdx) {
+                            child.style.color = 'var(--text-secondary)';
+                            child.style.opacity = '0.3';
+                            child.style.transform = 'scale(0.95)';
+                            child.style.textShadow = 'none';
+                        } else {
+                            child.style.color = 'var(--text-secondary)';
+                            child.style.opacity = '0.6';
+                            child.style.transform = 'scale(1)';
+                            child.style.textShadow = 'none';
+                        }
+                    });
+                }
+            }
         }
-    }, 500);
+    }, 100); // 100ms interval for buttery smooth karaoke tracking
 }
 
 function formatTime(seconds) {
@@ -188,7 +220,7 @@ function updateMediaSession(track) {
 
     navigator.mediaSession.setActionHandler('play', () => { window.togglePlay(); });
     navigator.mediaSession.setActionHandler('pause', () => { window.togglePlay(); });
-    navigator.mediaSession.setActionHandler('nexttrack', () => { window.playNext(); });
+    navigator.mediaSession.setActionHandler('nexttrack', () => { if(window.playNextLogic) window.playNextLogic(); });
     navigator.mediaSession.setActionHandler('previoustrack', () => { window.playPrev(); });
     
     try {
@@ -224,7 +256,7 @@ window.playTrackByIndex = (index) => {
     
     window.OCTAVE.playStats[track.videoId] = (window.OCTAVE.playStats[track.videoId] || 0) + 1;
     window.OCTAVE.recentPlayed =[track, ...window.OCTAVE.recentPlayed.filter(t => t.videoId !== track.videoId)];
-    saveCache();
+    window.saveCache();
     
     updatePlayerUI(track);
     if (ytReady && YTP) YTP.loadVideoById({ videoId: track.videoId });
@@ -244,178 +276,15 @@ window.playPrev = () => {
     else if (window.OCTAVE.currentIndex > 0) { window.playTrackByIndex(window.OCTAVE.currentIndex - 1); }
 };
 
-async function playNextLogic() {
-    if (window.OCTAVE.currentIndex < window.OCTAVE.queue.length - 1) {
-        window.playTrackByIndex(window.OCTAVE.currentIndex + 1);
-    } else {
-        let seedTrack = window.OCTAVE.queue[window.OCTAVE.currentIndex];
-        if (!seedTrack) return;
-        
-        const likedKeys = Object.keys(window.OCTAVE.liked);
-        const recentTracks = window.OCTAVE.recentPlayed;
-        const rand = Math.random();
-        
-        if (rand < 0.3 && likedKeys.length > 0) {
-            seedTrack = window.OCTAVE.liked[likedKeys[Math.floor(Math.random() * likedKeys.length)]];
-        } else if (rand < 0.5 && recentTracks.length > 0) {
-            seedTrack = recentTracks[Math.floor(Math.random() * recentTracks.length)];
-        }
-        
-        for (let i = 0; i < INVIDIOUS.length; i++) {
-            const base = INVIDIOUS[(invIdx + i) % INVIDIOUS.length];
-            try {
-                const r = await fetch(`${base}/api/v1/videos/${seedTrack.videoId}?fields=recommendedVideos`, { signal: AbortSignal.timeout(5000) });
-                if (r.ok) {
-                    const d = await r.json();
-                    if (d.recommendedVideos && d.recommendedVideos.length > 0) {
-                        const recentIds = window.OCTAVE.recentPlayed.slice(0, 15).map(t => t.videoId);
-                        let freshRecs = d.recommendedVideos.filter(v => !recentIds.includes(v.videoId));
-                        if (freshRecs.length === 0) freshRecs = d.recommendedVideos;
-                        const pick = freshRecs[Math.floor(Math.random() * Math.min(3, freshRecs.length))];
-                        
-                        const nextTrack = {
-                            videoId: pick.videoId, title: pick.title, author: pick.author,
-                            thumb: (pick.videoThumbnails && pick.videoThumbnails.length > 0) ? pick.videoThumbnails[0].url : ''
-                        };
-                        window.OCTAVE.queue.push(nextTrack);
-                        window.playTrackByIndex(window.OCTAVE.queue.length - 1);
-                        return;
-                    }
-                }
-            } catch(e) { continue; }
-        }
-    }
-}
-window.playNext = playNextLogic;
-
-window.fetchDailyRecommendations = async () => {
-    if (!window.OCTAVE) return;
-    const now = Date.now();
-    const FIVE_DAYS = 5 * 24 * 60 * 60 * 1000;
-    
-    if (window.OCTAVE.dailyRecs && window.OCTAVE.dailyRecs.tracks && window.OCTAVE.dailyRecs.tracks.length > 0) {
-        if (now - window.OCTAVE.dailyRecs.timestamp < FIVE_DAYS) return; 
-    }
-    
-    const baseTracks =[...Object.values(window.OCTAVE.liked), ...window.OCTAVE.recentPlayed].slice(0, 20);
-    
-    for (let i = 0; i < INVIDIOUS.length; i++) {
-        const base = INVIDIOUS[(invIdx + i) % INVIDIOUS.length];
-        try {
-            let url = '';
-            if (baseTracks.length > 0) {
-                const seed = baseTracks[Math.floor(Math.random() * baseTracks.length)];
-                url = `${base}/api/v1/videos/${seed.videoId}?fields=recommendedVideos`;
-            } else {
-                url = `${base}/api/v1/popular?videoCategory=10`; 
-            }
-
-            const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
-            if (r.ok) {
-                const d = await r.json();
-                let newTracks =[];
-
-                if (baseTracks.length > 0 && d.recommendedVideos) {
-                    newTracks = d.recommendedVideos.slice(0, 10);
-                } else if (baseTracks.length === 0 && Array.isArray(d)) {
-                    newTracks = d.slice(0, 10);
-                }
-
-                if (newTracks.length > 0) {
-                    window.OCTAVE.dailyRecs = {
-                        timestamp: now,
-                        tracks: newTracks.map(rec => ({
-                            videoId: rec.videoId, title: rec.title, author: rec.author,
-                            thumb: (rec.videoThumbnails && rec.videoThumbnails.length > 0) ? rec.videoThumbnails[0].url : ''
-                        }))
-                    };
-                    saveCache();
-                    const activeTab = document.querySelector('.nav-item.active');
-                    if(activeTab && activeTab.getAttribute('data-tab') === 'home') {
-                        window.renderHome();
-                    }
-                    break;
-                }
-            }
-        } catch(e) { continue; }
-    }
-};
-
-window.generateDiscoverMix = async () => {
-    const baseTracks =[...Object.values(window.OCTAVE.liked), ...window.OCTAVE.recentPlayed.slice(0, 10)];
-    if (baseTracks.length === 0) {
-        alert("Play or like some songs first to build your taste profile!");
-        return;
-    }
-
-    const dynamicView = document.getElementById('dynamic-view');
-    const originalHTML = dynamicView.innerHTML;
-    dynamicView.innerHTML = '<div style="padding: 100px 20px; text-align:center;"><i class="fa-solid fa-wand-magic-sparkles fa-bounce" style="font-size: 40px; color: var(--accent); margin-bottom: 20px;"></i><h2>Brewing your mix...</h2><p style="color:var(--text-secondary);font-size:14px;margin-top:10px;">Analyzing taste profile via open API graph.</p></div>';
-
-    const seeds =[];
-    for(let i=0; i<3; i++) seeds.push(baseTracks[Math.floor(Math.random()*baseTracks.length)]);
-    
-    const newQueue =[];
-    const seenIds = new Set();
-
-    for (const seed of seeds) {
-        if(!seed) continue;
-        for (let i = 0; i < INVIDIOUS.length; i++) {
-            const base = INVIDIOUS[(invIdx + i) % INVIDIOUS.length];
-            try {
-                const r = await fetch(`${base}/api/v1/videos/${seed.videoId}?fields=recommendedVideos`);
-                if (r.ok) {
-                    const d = await r.json();
-                    if (d.recommendedVideos) {
-                        d.recommendedVideos.slice(0, 6).forEach(rec => {
-                            if(!seenIds.has(rec.videoId)) {
-                                seenIds.add(rec.videoId);
-                                newQueue.push({
-                                    videoId: rec.videoId, title: rec.title, author: rec.author,
-                                    thumb: (rec.videoThumbnails && rec.videoThumbnails.length > 0) ? rec.videoThumbnails[0].url : ''
-                                });
-                            }
-                        });
-                    }
-                    break; 
-                }
-            } catch(e) { continue; }
-        }
-    }
-
-    if (newQueue.length > 0) {
-        newQueue.sort(() => 0.5 - Math.random());
-        window.OCTAVE.queue = newQueue;
-        window.playTrackByIndex(0);
-        document.querySelector('.nav-item.active').click(); 
-    } else {
-        dynamicView.innerHTML = originalHTML;
-        alert("Algorithm failed to connect to network. Try again.");
-    }
-};
-
 window.playPlaylist = (plName) => {
     const pl = window.OCTAVE.playlists[plName];
     if (pl && pl.length > 0) { window.OCTAVE.queue =[...pl]; window.playTrackByIndex(0); }
 };
 
-window.smartShufflePlaylist = (plName) => {
-    const pl = window.OCTAVE.playlists[plName];
-    if (pl && pl.length > 0) {
-        let sorted = [...pl].sort((a, b) => {
-            const countA = window.OCTAVE.playStats[a.videoId] || 0;
-            const countB = window.OCTAVE.playStats[b.videoId] || 0;
-            if (countB !== countA) return countB - countA;
-            return 0.5 - Math.random(); 
-        });
-        window.OCTAVE.queue = sorted; window.playTrackByIndex(0);
-    }
-};
-
 window.deletePlaylist = (plName) => {
     if (confirm(`Are you sure you want to permanently delete "${plName}"?`)) {
         delete window.OCTAVE.playlists[plName];
-        saveCache();
+        window.saveCache();
         const activeNav = document.querySelector('.nav-item.active');
         if (activeNav) activeNav.click();
     }
@@ -423,18 +292,17 @@ window.deletePlaylist = (plName) => {
 
 window.removeFromPlaylist = (plName, index) => {
     window.OCTAVE.playlists[plName].splice(index, 1);
-    saveCache();
+    window.saveCache();
     if(window.renderPlaylistDetail) window.renderPlaylistDetail(plName);
 };
 
 window.removeFromLiked = (videoId) => {
     delete window.OCTAVE.liked[videoId];
-    saveCache();
+    window.saveCache();
     if(window.renderLikedSongs) window.renderLikedSongs();
 };
 
 window.applyLiquidShadow = (imageSrc) => {
-    // Inject the water-flow CSS animation globally if it doesn't exist
     if (!document.getElementById('liquid-keyframes')) {
         const style = document.createElement('style');
         style.id = 'liquid-keyframes';
@@ -463,7 +331,6 @@ window.applyLiquidShadow = (imageSrc) => {
             
             const r = data[0], g = data[1], b = data[2];
 
-            // Target the entire background of the full player
             const fpPlayer = document.getElementById('full-player');
             if (fpPlayer) {
                 fpPlayer.style.background = `
@@ -476,13 +343,11 @@ window.applyLiquidShadow = (imageSrc) => {
                 fpPlayer.style.animation = "liquidFlow 15s ease-in-out infinite";
             }
 
-            // Restore the album art shadow to give it depth on top of the water
             const fpArt = document.getElementById('fp-art');
             if (fpArt) {
                 fpArt.style.boxShadow = `0 30px 60px rgba(0,0,0,0.6), 0 0 40px rgba(${r}, ${g}, ${b}, 0.3)`;
             }
 
-            // Also apply a subtle liquid mesh to the mini player
             const mini = document.querySelector('.mini-player');
             if (mini) {
                 mini.style.background = `
@@ -491,9 +356,7 @@ window.applyLiquidShadow = (imageSrc) => {
                 `;
                 mini.style.boxShadow = `0 10px 30px rgba(0,0,0,0.5), 0 0 20px rgba(${r}, ${g}, ${b}, 0.15)`;
             }
-        } catch(e) {
-            // Fails silently to fallback CSS if the image throws a CORS issue
-        }
+        } catch(e) {}
     };
     img.src = imageSrc;
 };
@@ -517,9 +380,6 @@ function updatePlayerUI(track) {
     if(els.fA) els.fA.innerHTML = `${window.escapeHTML(track.author)} <i class="fa-solid fa-chevron-right" style="font-size: 10px; margin-left: 4px;"></i>`;
     if(els.fArt) { els.fArt.src = track.thumb; els.fArt.style.display = 'block'; }
     
-    const ambientBg = document.getElementById('fp-ambient-bg');
-    if(ambientBg) ambientBg.style.backgroundImage = `url(${track.thumb})`;
-
     window.applyLiquidShadow(track.thumb);
 
     const isLiked = !!window.OCTAVE.liked[track.videoId];
@@ -536,7 +396,7 @@ function updatePlayerUI(track) {
 window.toggleLike = (track) => {
     if (window.OCTAVE.liked[track.videoId]) { delete window.OCTAVE.liked[track.videoId]; } 
     else { window.OCTAVE.liked[track.videoId] = track; }
-    saveCache(); updatePlayerUI(track);
+    window.saveCache(); updatePlayerUI(track);
     if(window.renderHome) window.renderHome();
 };
 
@@ -558,13 +418,13 @@ function seekToPosition(e, containerElement) {
 }
 
 window.performSearch = async (query) => {
-    for (let i = 0; i < INVIDIOUS.length; i++) {
-        const base = INVIDIOUS[(invIdx + i) % INVIDIOUS.length];
+    for (let i = 0; i < window.INVIDIOUS.length; i++) {
+        const base = window.INVIDIOUS[(window.invIdx + i) % window.INVIDIOUS.length];
         try {
             const r = await fetch(`${base}/api/v1/search?q=${encodeURIComponent(query)}&type=video&fields=videoId,title,author,videoThumbnails`, { signal: AbortSignal.timeout(7000) });
             if (!r.ok) continue;
             const d = await r.json(); 
-            invIdx = (invIdx + i) % INVIDIOUS.length;
+            window.invIdx = (window.invIdx + i) % window.INVIDIOUS.length;
             return d.map(item => ({
                 videoId: item.videoId, title: item.title, author: item.author,
                 thumb: (item.videoThumbnails && item.videoThumbnails.length > 0) ? item.videoThumbnails[0].url : ''
@@ -588,6 +448,9 @@ window.setSleepTimer = (minutes) => {
     }, minutes * 60000);
 };
 
+window.activeSyncedLyrics = null;
+window.lastLyricIdx = -1;
+
 window.fetchLyrics = async (artist, title) => {
     let rawTitle = title.includes(' - ') ? title.split(' - ').slice(1).join(' - ') : title;
     
@@ -608,19 +471,35 @@ window.fetchLyrics = async (artist, title) => {
         const r1 = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(query)}`);
         if (r1.ok) {
             const data = await r1.json();
-            if (data && data.length > 0 && data[0].plainLyrics) return data[0].plainLyrics;
+            if (data && data.length > 0) {
+                if (data[0].syncedLyrics) {
+                    const lines = data[0].syncedLyrics.split('\n');
+                    window.activeSyncedLyrics = [];
+                    let html = '<div style="padding: 20px 0 120px 0; display: flex; flex-direction: column; gap: 16px; text-align: center;">';
+                    lines.forEach(line => {
+                        const match = line.match(/\[(\d+):(\d+\.\d+)\](.*)/);
+                        if(match) {
+                            const time = parseInt(match[1]) * 60 + parseFloat(match[2]);
+                            const text = match[3].trim();
+                            if(text) {
+                                window.activeSyncedLyrics.push({ time, text });
+                                html += `<div style="transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); font-size: 20px; font-weight: 800; cursor: pointer; color: var(--text-secondary); opacity: 0.6;" onclick="YTP.seekTo(${time}, true)">${window.escapeHTML(text)}</div>`;
+                            }
+                        }
+                    });
+                    html += '</div>';
+                    window.lastLyricIdx = -1;
+                    return { isSynced: true, html };
+                } else if (data[0].plainLyrics) {
+                    window.activeSyncedLyrics = null;
+                    return { isSynced: false, html: window.escapeHTML(data[0].plainLyrics) };
+                }
+            }
         }
     } catch(e) { console.warn("LRCLIB fallback triggered"); }
     
-    try {
-        const r2 = await fetch(`https://api.lyrics.ovh/v1/${encodeURIComponent(cleanArtist)}/${encodeURIComponent(cleanTitle)}`);
-        if (r2.ok) {
-            const data = await r2.json();
-            if (data.lyrics) return data.lyrics;
-        }
-    } catch(e) { console.warn("Lyrics.ovh fallback triggered"); }
-    
-    return "Lyrics not available in open-source databases.";
+    window.activeSyncedLyrics = null;
+    return { isSynced: false, html: "Lyrics not available in open-source databases." };
 };
 
 window.fetchArtistBio = async (artist) => {
@@ -645,72 +524,3 @@ window.fetchArtistBio = async (artist) => {
     } catch(e) {}
     return "Artist biography not available in databases.";
 };
-
-document.addEventListener('DOMContentLoaded', () => {
-    document.querySelector('.play-btn-mini')?.addEventListener('click', (e) => { e.stopPropagation(); window.togglePlay(); });
-    document.getElementById('fp-play')?.addEventListener('click', window.togglePlay);
-    document.getElementById('fp-next')?.addEventListener('click', playNextLogic);
-    document.getElementById('fp-prev')?.addEventListener('click', window.playPrev);
-    
-    document.getElementById('mini-like-btn')?.addEventListener('click', (e) => { 
-        e.stopPropagation(); 
-        if(window.OCTAVE.currentIndex >= 0) window.toggleLike(window.OCTAVE.queue[window.OCTAVE.currentIndex]); 
-    });
-    document.getElementById('fp-like')?.addEventListener('click', () => { 
-        if(window.OCTAVE.currentIndex >= 0) window.toggleLike(window.OCTAVE.queue[window.OCTAVE.currentIndex]); 
-    });
-
-    document.getElementById('fp-progress-container')?.addEventListener('click', (e) => seekToPosition(e, document.getElementById('fp-progress-container')));
-    document.querySelector('.mini-player')?.addEventListener('click', (e) => {
-        const rect = document.querySelector('.mini-player').getBoundingClientRect();
-        if (e.clientY - rect.top <= 10) { e.stopPropagation(); seekToPosition(e, document.querySelector('.mini-player')); }
-    });
-
-    const fpPanel = document.getElementById('fp-overlay-panel');
-    const fpContent = document.getElementById('fp-overlay-content');
-    const fpTitle = document.getElementById('fp-overlay-title');
-    
-    document.getElementById('fp-lyrics-btn')?.addEventListener('click', async () => {
-        if(window.OCTAVE.currentIndex < 0) return;
-        fpTitle.innerText = 'Lyrics';
-        fpContent.innerHTML = '<div style="text-align:center; margin-top: 40px;"><i class="fa-solid fa-spinner fa-spin" style="font-size: 24px; color: var(--accent);"></i></div>';
-        fpPanel.classList.add('active');
-        const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
-        const lyrics = await window.fetchLyrics(track.author, track.title);
-        fpContent.innerHTML = `<div id="lyrics-content">${window.escapeHTML(lyrics)}</div>`;
-    });
-
-    document.getElementById('fp-artist')?.addEventListener('click', async () => {
-        if(window.OCTAVE.currentIndex < 0) return;
-        fpTitle.innerText = 'Artist Bio';
-        fpContent.innerHTML = '<div style="text-align:center; margin-top: 40px;"><i class="fa-solid fa-spinner fa-spin" style="font-size: 24px; color: var(--accent);"></i></div>';
-        fpPanel.classList.add('active');
-        const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
-        const bio = await window.fetchArtistBio(track.author);
-        fpContent.innerHTML = `<div style="color: var(--text-primary); font-size: 15px; line-height: 1.8;">${window.escapeHTML(bio)}</div>`;
-    });
-
-    document.getElementById('fp-queue-btn')?.addEventListener('click', () => {
-        if(window.OCTAVE.currentIndex < 0) return;
-        fpTitle.innerText = 'Up Next';
-        fpContent.innerHTML = '';
-        fpPanel.classList.add('active');
-        const q = window.OCTAVE.queue;
-        const curr = window.OCTAVE.currentIndex;
-        for(let i = curr; i < q.length; i++) {
-            const track = q[i];
-            const isPlaying = i === curr;
-            const el = document.createElement('div');
-            el.style.cssText = `display: flex; align-items: center; gap: 14px; padding: 12px; background: ${isPlaying ? 'rgba(30,215,96,0.1)' : 'var(--bg-surface)'}; border-radius: 8px; margin-bottom: 12px; border: ${isPlaying ? '1px solid var(--accent)' : '1px solid transparent'};`;
-            el.innerHTML = `<img src="${track.thumb}" style="width: 40px; height: 40px; border-radius: 6px; object-fit: cover;"><div style="flex: 1; min-width: 0;"><div style="font-size: 14px; font-weight: 600; color: ${isPlaying ? 'var(--accent)' : 'var(--text-primary)'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${window.escapeHTML(track.title)}</div><div style="font-size: 12px; color: var(--text-secondary);">${window.escapeHTML(track.author)}</div></div>${isPlaying ? '<i class="fa-solid fa-volume-high" style="color: var(--accent);"></i>' : ''}`;
-            fpContent.appendChild(el);
-        }
-    });
-
-    document.getElementById('close-fp-overlay')?.addEventListener('click', () => fpPanel.classList.remove('active'));
-    document.getElementById('opt-sleep-timer')?.addEventListener('click', () => {
-        document.getElementById('track-options-modal')?.classList.remove('active');
-        document.getElementById('timer-modal')?.classList.add('active');
-    });
-    document.getElementById('close-timer')?.addEventListener('click', () => document.getElementById('timer-modal')?.classList.remove('active'));
-});
