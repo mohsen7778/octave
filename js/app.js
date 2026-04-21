@@ -125,7 +125,6 @@ const fpTitle = document.getElementById('fp-overlay-title');
 
 document.getElementById('close-fp-overlay').addEventListener('click', () => fpPanel.classList.remove('active'));
 
-// ONLY ONE EVENT LISTENER FOR LYRICS
 document.getElementById('fp-lyrics-btn').addEventListener('click', async () => {
     if(window.OCTAVE.currentIndex < 0) return;
     fpTitle.innerText = 'Lyrics';
@@ -200,14 +199,12 @@ window.renderArtistPage = async (artistName) => {
     }
 };
 
-// ONLY ONE EVENT LISTENER FOR ARTIST PAGE
 document.getElementById('fp-artist').addEventListener('click', () => {
     if(window.OCTAVE.currentIndex < 0) return;
     const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
     window.renderArtistPage(track.author);
 });
 
-// ONLY ONE EVENT LISTENER FOR QUEUE BUTTON
 document.getElementById('fp-queue-btn').addEventListener('click', () => {
     if(window.OCTAVE.currentIndex < 0) return;
     fpTitle.innerText = 'Up Next';
@@ -249,74 +246,56 @@ if (fpOptionsBtn) {
     });
 }
 
-// ─── UPDATED: fetchTrendingMusic with Trending API + Fallback Search ───────────
 window.fetchTrendingMusic = async () => {
     const grid = document.getElementById('home-trending-grid');
     if (!grid) return;
     
-    let loaded = false;
+    try {
+        const response = await fetch('https://itunes.apple.com/us/rss/topsongs/limit=15/json');
+        const data = await response.json();
+        const items = data.feed.entry;
 
-    // ATTEMPT 1: Try official Trending API
-    for (let i = 0; i < window.INVIDIOUS.length; i++) {
-        const base = window.INVIDIOUS[(window.invIdx + i) % window.INVIDIOUS.length];
-        try {
-            const r = await fetch(`${base}/api/v1/trending?type=Music`, { signal: AbortSignal.timeout(5000) });
-            if (r.ok) {
-                const d = await r.json();
-                if (d && d.length > 0) {
-                    const filtered = d.filter(track => track.lengthSeconds && track.lengthSeconds < 600).slice(0, 15);
-                    if (filtered.length > 0) {
-                        grid.innerHTML = '';
-                        filtered.forEach(track => {
-                            const el = document.createElement('div');
-                            el.className = 'square-card';
-                            const thumb = (track.videoThumbnails && track.videoThumbnails.length > 0) ? track.videoThumbnails[0].url : '';
-                            el.innerHTML = `<div class="card-art shadow-heavy" style="background-image: url('${thumb}'); background-size: cover;"></div><div class="card-title">${window.escapeHTML(track.title)}</div>`;
-                            el.addEventListener('click', () => window.playTrack({
-                                videoId: track.videoId, title: track.title, author: track.author, thumb: thumb
-                            }));
-                            grid.appendChild(el);
-                        });
-                        window.invIdx = (window.invIdx + i) % window.INVIDIOUS.length;
-                        loaded = true;
-                        return;
-                    }
-                }
-            }
-        } catch(e) { continue; }
-    }
+        grid.innerHTML = '<div style="color: var(--text-secondary); font-size: 13px;"><i class="fa-solid fa-spinner fa-spin"></i> Syncing Top Hits...</div>';
 
-    // ATTEMPT 2: If Trending is blocked, fallback to Global Top Hits search
-    if (!loaded) {
-        for (let i = 0; i < window.INVIDIOUS.length; i++) {
-            const base = window.INVIDIOUS[(window.invIdx + i) % window.INVIDIOUS.length];
+        const trendingTracks = [];
+        const base = window.INVIDIOUS[window.invIdx % window.INVIDIOUS.length];
+
+        for (const item of items) {
+            const title = item['im:name'].label;
+            const artist = item['im:artist'].label;
+            
             try {
-                const r = await fetch(`${base}/api/v1/search?q=Global+Top+50+Music+Hits+Playlist&type=video`, { signal: AbortSignal.timeout(5000) });
-                if (r.ok) {
-                    const d = await r.json();
-                    if (d && d.length > 0) {
-                        grid.innerHTML = '';
-                        d.filter(track => track.lengthSeconds && track.lengthSeconds < 600).slice(0, 15).forEach(track => {
-                            const el = document.createElement('div');
-                            el.className = 'square-card';
-                            const thumb = (track.videoThumbnails && track.videoThumbnails.length > 0) ? track.videoThumbnails[0].url : '';
-                            el.innerHTML = `<div class="card-art shadow-heavy" style="background-image: url('${thumb}'); background-size: cover;"></div><div class="card-title">${window.escapeHTML(track.title)}</div>`;
-                            el.addEventListener('click', () => window.playTrack({
-                                videoId: track.videoId, title: track.title, author: track.author, thumb: thumb
-                            }));
-                            grid.appendChild(el);
-                        });
-                        window.invIdx = (window.invIdx + i) % window.INVIDIOUS.length;
-                        return;
-                    }
+                const searchRes = await fetch(`${base}/api/v1/search?q=${encodeURIComponent(artist + ' ' + title)}&type=video&fields=videoId,title,author,videoThumbnails,lengthSeconds`, { signal: AbortSignal.timeout(3000) });
+                const searchData = await searchRes.json();
+                const bestMatch = searchData.find(v => v.lengthSeconds && v.lengthSeconds < 600);
+                
+                if (bestMatch) {
+                    trendingTracks.push({
+                        videoId: bestMatch.videoId,
+                        title: bestMatch.title,
+                        author: bestMatch.author,
+                        thumb: (bestMatch.videoThumbnails && bestMatch.videoThumbnails.length > 0) ? bestMatch.videoThumbnails[0].url : ''
+                    });
                 }
-            } catch(e) { continue; }
+            } catch (e) { continue; }
         }
-    }
 
-    grid.innerHTML = '<div style="color: var(--text-secondary); font-size: 13px;">Failed to load trending charts.</div>';
+        if (trendingTracks.length > 0) {
+            grid.innerHTML = '';
+            trendingTracks.forEach(track => {
+                const el = document.createElement('div');
+                el.className = 'square-card';
+                el.innerHTML = `<div class="card-art shadow-heavy" style="background-image: url('${track.thumb}'); background-size: cover;"></div><div class="card-title">${window.escapeHTML(track.title)}</div>`;
+                el.addEventListener('click', () => window.playTrack(track));
+                grid.appendChild(el);
+            });
+        } else {
+            grid.innerHTML = '<div style="color: var(--text-secondary); font-size: 13px;">Charts unavailable.</div>';
+        }
+    } catch(e) {
+        grid.innerHTML = '<div style="color: var(--text-secondary); font-size: 13px;">Charts unavailable.</div>';
+    }
 };
-// ─────────────────────────────────────────────────────────────────────────────
 
 window.renderHome = () => {
     const hour = new Date().getHours();
@@ -467,7 +446,7 @@ window.renderLikedSongs = () => {
             const stats = window.OCTAVE.playStats[track.videoId] || 0;
             const el = document.createElement('div');
             el.style.cssText = 'display: flex; align-items: center; gap: 14px; padding: 12px; background: var(--bg-surface); border-radius: 8px; margin-bottom: 12px; cursor: pointer;';
-            el.innerHTML = `<img src="${track.thumb}" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover;"><div style="flex: 1; min-width: 0;"><div style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${window.escapeHTML(track.title)}</div><div style="font-size: 12px; color: var(--text-secondary);">${window.escapeHTML(track.author)} • <i class="fa-solid fa-fire" style="color: #ff5000; font-size: 10px;"></i> ${stats} plays</div></div><button class="icon-btn remove-btn" style="color: var(--accent); padding: 10px; z-index: 10;"><i class="fa-solid fa-heart"></i></button>`;
+            el.innerHTML = `<img src="${track.thumb}" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover;"><div style="flex: 1; min-width: 0;"><div style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${window.escapeHTML(track.title)}</div><div style="font-size: 12px; color: var(--text-secondary);">${window.escapeHTML(track.author)} • <i class="fa-solid fa-fire" style="color: #ff5000; font-size: 10px;"></i> ${stats} plays</div></div><button class="icon-btn remove-btn" style="color: #ff4444; padding: 10px; z-index: 10;"><i class="fa-solid fa-heart"></i></button>`;
             
             el.addEventListener('click', (e) => {
                 const removeBtn = e.target.closest('.remove-btn');
