@@ -434,6 +434,20 @@ window.removeFromLiked = (videoId) => {
 };
 
 window.applyLiquidShadow = (imageSrc) => {
+    // Inject the water-flow CSS animation globally if it doesn't exist
+    if (!document.getElementById('liquid-keyframes')) {
+        const style = document.createElement('style');
+        style.id = 'liquid-keyframes';
+        style.innerHTML = `
+            @keyframes liquidFlow {
+                0% { background-position: 0% 0%; }
+                50% { background-position: 100% 100%; }
+                100% { background-position: 0% 0%; }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
     const img = new Image();
     img.crossOrigin = "Anonymous";
     img.onload = () => {
@@ -448,22 +462,37 @@ window.applyLiquidShadow = (imageSrc) => {
             const data = ctx.getImageData(cx, cy, 1, 1).data;
             
             const r = data[0], g = data[1], b = data[2];
-            const color = `rgba(${r}, ${g}, ${b}, 0.5)`;
-            const glowColor = `rgba(${r}, ${g}, ${b}, 0.25)`;
 
+            // Target the entire background of the full player
+            const fpPlayer = document.getElementById('full-player');
+            if (fpPlayer) {
+                fpPlayer.style.background = `
+                    radial-gradient(circle at 10% 20%, rgba(${r}, ${g}, ${b}, 0.25) 0%, transparent 50%),
+                    radial-gradient(circle at 90% 80%, rgba(${r}, ${g}, ${b}, 0.25) 0%, transparent 50%),
+                    radial-gradient(circle at 50% 50%, rgba(${r}, ${g}, ${b}, 0.15) 0%, transparent 60%),
+                    var(--bg-deep)
+                `;
+                fpPlayer.style.backgroundSize = "200% 200%";
+                fpPlayer.style.animation = "liquidFlow 15s ease-in-out infinite";
+            }
+
+            // Restore the album art shadow to give it depth on top of the water
             const fpArt = document.getElementById('fp-art');
             if (fpArt) {
-                fpArt.style.boxShadow = `0 20px 50px ${color}, 0 0 100px ${glowColor}`;
-                fpArt.style.transition = 'box-shadow 0.8s ease';
+                fpArt.style.boxShadow = `0 30px 60px rgba(0,0,0,0.6), 0 0 40px rgba(${r}, ${g}, ${b}, 0.3)`;
             }
 
+            // Also apply a subtle liquid mesh to the mini player
             const mini = document.querySelector('.mini-player');
             if (mini) {
-                mini.style.boxShadow = `0 10px 30px ${color}`;
-                mini.style.transition = 'box-shadow 0.8s ease';
+                mini.style.background = `
+                    radial-gradient(circle at 0% 50%, rgba(${r}, ${g}, ${b}, 0.15) 0%, transparent 70%),
+                    var(--glass-bg)
+                `;
+                mini.style.boxShadow = `0 10px 30px rgba(0,0,0,0.5), 0 0 20px rgba(${r}, ${g}, ${b}, 0.15)`;
             }
         } catch(e) {
-            // If API blocks CORS, gracefully fallback to default CSS without hanging
+            // Fails silently to fallback CSS if the image throws a CORS issue
         }
     };
     img.src = imageSrc;
