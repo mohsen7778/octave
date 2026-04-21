@@ -422,8 +422,11 @@ function seekToPosition(e, containerElement) {
 window.performSearch = async (query) => {
     for (let i = 0; i < window.INVIDIOUS.length; i++) {
         const base = window.INVIDIOUS[(window.invIdx + i) % window.INVIDIOUS.length];
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 7000);
         try {
-            const r = await fetch(`${base}/api/v1/search?q=${encodeURIComponent(query)}&type=video&fields=videoId,title,author,videoThumbnails,lengthSeconds`, { signal: AbortSignal.timeout(7000) });
+            const r = await fetch(`${base}/api/v1/search?q=${encodeURIComponent(query)}&type=video&fields=videoId,title,author,videoThumbnails,lengthSeconds`, { signal: controller.signal });
+            clearTimeout(timeoutId);
             if (!r.ok) continue;
             const d = await r.json(); 
             window.invIdx = (window.invIdx + i) % window.INVIDIOUS.length;
@@ -537,8 +540,11 @@ window.fetchFullArtistProfile = async (artist) => {
 
     for (let i = 0; i < window.INVIDIOUS.length; i++) {
         const base = window.INVIDIOUS[(window.invIdx + i) % window.INVIDIOUS.length];
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 7000);
         try {
-            const r3 = await fetch(`${base}/api/v1/search?q=${encodeURIComponent(cleanArtist)}&type=video&sort_by=view_count&fields=videoId,title,author,videoThumbnails,lengthSeconds`, { signal: AbortSignal.timeout(7000) });
+            const r3 = await fetch(`${base}/api/v1/search?q=${encodeURIComponent(cleanArtist)}&type=video&sort_by=view_count&fields=videoId,title,author,videoThumbnails,lengthSeconds`, { signal: controller.signal });
+            clearTimeout(timeoutId);
             if (r3.ok) {
                 const d = await r3.json();
                 if (d && d.length > 0) {
