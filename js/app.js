@@ -49,7 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.querySelector('.nav-item.active').classList.remove('active');
             item.classList.add('active');
             const tab = item.getAttribute('data-tab');
-            
+
             if (tab === 'home') {
                 dynamicView.innerHTML = views.home;
                 window.renderHome();
@@ -64,8 +64,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     handleBravePrompt();
     bindHomeModals();
-    window.renderHome(); 
-    
+    window.renderHome();
+
     document.querySelector('.mini-inner').addEventListener('click', () => document.getElementById('full-player').classList.add('active'));
     document.getElementById('close-fp').addEventListener('click', () => document.getElementById('full-player').classList.remove('active'));
     document.getElementById('close-track-options').addEventListener('click', () => document.getElementById('track-options-modal').classList.remove('active'));
@@ -84,7 +84,7 @@ document.body.addEventListener('click', async (e) => {
     if (e.target.closest('#open-yt-import')) {
         document.getElementById('yt-import-modal').classList.add('active');
     }
-    
+
     const pageBtn = e.target.closest('[data-page]');
     if (pageBtn) {
         document.getElementById('side-menu').classList.remove('active');
@@ -105,7 +105,9 @@ document.body.addEventListener('click', async (e) => {
                     document.querySelector('.nav-item[data-tab="home"]').click();
                 });
             }
-        } catch(err) { dynamicView.innerHTML = '<div class="empty-state-text">Failed to load page.</div>'; }
+        } catch (err) {
+            dynamicView.innerHTML = '<div class="empty-state-text">Failed to load.</div>';
+        }
     }
 });
 
@@ -122,23 +124,18 @@ document.getElementById('import-vault-input').addEventListener('change', window.
 const fpPanel = document.getElementById('fp-overlay-panel');
 const fpContent = document.getElementById('fp-overlay-content');
 const fpTitle = document.getElementById('fp-overlay-title');
+document.getElementById('close-fp-overlay').addEventListener('click', () => fpPanel.classList.remove('active'));
 
-document.getElementById('close-fp-overlay').addEventListener('click', () => {
-    fpPanel.classList.remove('active');
-    window.isUserScrollingLyrics = false;
-});
-
-// LYRICS OVERHAUL
-window.isUserScrollingLyrics = false;
+// STATIC LYRICS WITH FONT PICKER
 document.getElementById('fp-lyrics-btn').addEventListener('click', async () => {
-    if(window.OCTAVE.currentIndex < 0) return;
+    if (window.OCTAVE.currentIndex < 0) return;
     fpTitle.innerText = 'Lyrics';
     fpContent.innerHTML = '<div style="text-align:center; margin-top: 40px;"><i class="fa-solid fa-spinner fa-spin" style="font-size: 24px; color: var(--accent);"></i></div>';
     fpPanel.classList.add('active');
-    
+
     const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
-    const result = await window.fetchLyrics(track.author, track.title);
-    
+    const html = await window.fetchLyrics(track.author, track.title);
+
     const fonts = [
         { name: 'Modern', css: 'Plus Jakarta Sans' },
         { name: 'Clean', css: 'Inter' },
@@ -159,17 +156,7 @@ document.getElementById('fp-lyrics-btn').addEventListener('click', async () => {
     });
     fontHeader += `</div>`;
 
-    fpContent.innerHTML = fontHeader + `<div id="lyrics-content">${result.html}</div>`;
-    
-    // User Scroll Logic
-    const content = document.getElementById('fp-overlay-content');
-    let scrollTimer = null;
-    content.addEventListener('touchstart', () => { window.isUserScrollingLyrics = true; });
-    content.addEventListener('scroll', () => {
-        window.isUserScrollingLyrics = true;
-        clearTimeout(scrollTimer);
-        scrollTimer = setTimeout(() => { window.isUserScrollingLyrics = false; }, 3500); // Resume auto after 3.5s of no activity
-    });
+    fpContent.innerHTML = fontHeader + `<div id="lyrics-content">${html}</div>`;
 });
 
 window.setLyricsFont = (fontCss, el) => {
@@ -178,14 +165,17 @@ window.setLyricsFont = (fontCss, el) => {
     document.querySelectorAll('.font-option').forEach(opt => opt.classList.remove('active'));
     el.classList.add('active');
     const container = document.getElementById('lyrics-content');
-    if(container) container.firstChild.style.fontFamily = `'${fontCss}', sans-serif`;
+    if (container && container.firstChild) {
+        container.firstChild.style.fontFamily = `'${fontCss}', sans-serif`;
+    }
 };
 
 window.renderArtistPage = async (artistName) => {
     document.getElementById('full-player').classList.remove('active');
     document.getElementById('fp-overlay-panel').classList.remove('active');
     const dynamicView = document.getElementById('dynamic-view');
-    dynamicView.innerHTML = '<div style="padding: 100px 20px; text-align:center;"><i class="fa-solid fa-spinner fa-spin" style="font-size: 40px; color: var(--accent);"></i><div style="margin-top: 16px; color: var(--text-secondary);">Loading Artist Profile...</div></div>';
+    dynamicView.innerHTML = '<div style="padding: 100px 20px; text-align:center;"><i class="fa-solid fa-spinner fa-spin" style="font-size: 40px; color: var(--accent);"></i></div>';
+
     const profile = await window.fetchFullArtistProfile(artistName);
     let tracksHTML = '';
     if (profile.tracks.length > 0) {
@@ -204,7 +194,9 @@ window.renderArtistPage = async (artistName) => {
     } else {
         tracksHTML = '<div class="empty-state-text">No tracks found.</div>';
     }
+
     const bannerStyle = profile.banner ? `background-image: url('${profile.banner}'); background-size: cover; background-position: center;` : `background: linear-gradient(135deg, var(--bg-deep), var(--glass-bg));`;
+
     dynamicView.innerHTML = `
         <div style="position: relative; width: 100%; height: 250px; ${bannerStyle}">
             <div style="position: absolute; inset: 0; background: linear-gradient(0deg, var(--bg-deep) 0%, transparent 100%);"></div>
@@ -216,15 +208,13 @@ window.renderArtistPage = async (artistName) => {
         <div style="padding: 20px;">
             <div style="font-size: 14px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 24px; background: var(--glass-bg); border: 1px solid var(--glass-border); padding: 16px; border-radius: 12px;">${window.escapeHTML(profile.bio)}</div>
             <h2 class="section-title" style="margin-bottom: 16px;">Top Tracks</h2>
-            <div class="vertical-list" id="artist-tracks-list">
-                ${tracksHTML}
-            </div>
+            <div class="vertical-list" id="artist-tracks-list">${tracksHTML}</div>
         </div>
         <div class="bottom-spacer"></div>
     `;
+
     if (profile.tracks.length > 0) {
-        const trackNodes = document.querySelectorAll('.artist-track-item');
-        trackNodes.forEach((node, idx) => {
+        document.querySelectorAll('.artist-track-item').forEach((node, idx) => {
             node.addEventListener('click', () => {
                 window.OCTAVE.queue = [...profile.tracks];
                 window.playTrackByIndex(idx);
@@ -234,19 +224,19 @@ window.renderArtistPage = async (artistName) => {
 };
 
 document.getElementById('fp-artist').addEventListener('click', () => {
-    if(window.OCTAVE.currentIndex < 0) return;
+    if (window.OCTAVE.currentIndex < 0) return;
     const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
     window.renderArtistPage(track.author);
 });
 
 document.getElementById('fp-queue-btn').addEventListener('click', () => {
-    if(window.OCTAVE.currentIndex < 0) return;
+    if (window.OCTAVE.currentIndex < 0) return;
     fpTitle.innerText = 'Up Next';
     fpContent.innerHTML = '';
     fpPanel.classList.add('active');
     const q = window.OCTAVE.queue;
     const curr = window.OCTAVE.currentIndex;
-    for(let i = curr; i < q.length; i++) {
+    for (let i = curr; i < q.length; i++) {
         const track = q[i];
         const isPlaying = i === curr;
         const el = document.createElement('div');
@@ -267,22 +257,24 @@ document.getElementById('opt-sleep-timer').addEventListener('click', () => {
     document.getElementById('track-options-modal').classList.remove('active');
     document.getElementById('timer-modal').classList.add('active');
 });
+
 document.getElementById('close-timer').addEventListener('click', () => document.getElementById('timer-modal').classList.remove('active'));
 
-const fpOptionsBtn = document.getElementById('fp-options');
-if (fpOptionsBtn) {
-    fpOptionsBtn.addEventListener('click', () => {
+if (document.getElementById('fp-options')) {
+    document.getElementById('fp-options').addEventListener('click', () => {
         if (window.OCTAVE && window.OCTAVE.currentIndex >= 0) {
             openTrackOptions(window.OCTAVE.queue[window.OCTAVE.currentIndex]);
         }
     });
 }
 
+// TURBO-SYNC WITH 3-DAY CACHE
 window.fetchTrendingMusic = async () => {
     const grid = document.getElementById('home-trending-grid');
     if (!grid) return;
     const THREE_DAYS = 3 * 24 * 60 * 60 * 1000;
     const now = Date.now();
+
     if (window.OCTAVE.trendingData && window.OCTAVE.trendingData.tracks.length > 0) {
         if (now - window.OCTAVE.trendingData.timestamp < THREE_DAYS) {
             grid.innerHTML = '';
@@ -296,12 +288,14 @@ window.fetchTrendingMusic = async () => {
             return;
         }
     }
+
     try {
         const response = await fetch('https://itunes.apple.com/us/rss/topsongs/limit=50/json');
         const data = await response.json();
         const items = data.feed.entry;
         const trendingTracks = [];
         let count = 0;
+
         const fetchTrackWithRetry = async (item) => {
             const title = item['im:name'].label;
             const artist = item['im:artist'].label;
@@ -314,32 +308,46 @@ window.fetchTrendingMusic = async () => {
             }
             if (res) {
                 count++;
-                grid.innerHTML = `<div style="color: var(--text-secondary); font-size: 13px;"><i class="fa-solid fa-spinner fa-spin"></i> Turbo Syncing: ${count}/50 Hits</div>`;
+                grid.innerHTML = `<div style="color: var(--text-secondary); font-size: 13px;"><i class="fa-solid fa-spinner fa-spin"></i> Syncing: ${count}/50</div>`;
             }
             return res;
         };
+
         const tryFetch = async (base, query) => {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 4500);
             try {
-                const r = await fetch(`${base}/api/v1/search?q=${query}&type=video&fields=videoId,title,author,videoThumbnails,lengthSeconds`, { signal: controller.signal });
+                const r = await fetch(`${base}/api/v1/search?q=${query}&type=video&fields=videoId,title,author,videoThumbnails,lengthSeconds`, {
+                    signal: controller.signal
+                });
                 clearTimeout(timeoutId);
                 const d = await r.json();
                 const best = d.find(v => v.lengthSeconds && v.lengthSeconds < 600);
                 return best ? {
-                    videoId: best.videoId, title: best.title, author: best.author,
+                    videoId: best.videoId,
+                    title: best.title,
+                    author: best.author,
                     thumb: (best.videoThumbnails && best.videoThumbnails.length > 0) ? best.videoThumbnails[0].url : ''
                 } : null;
-            } catch(e) { return null; }
+            } catch (e) {
+                return null;
+            }
         };
+
         for (let i = 0; i < items.length; i += 5) {
             const batch = items.slice(i, i + 5);
             const results = await Promise.all(batch.map(item => fetchTrackWithRetry(item)));
-            results.forEach(res => { if(res) trendingTracks.push(res); });
+            results.forEach(res => {
+                if (res) trendingTracks.push(res);
+            });
         }
+
         if (trendingTracks.length > 0) {
             if (trendingTracks.length >= 20) {
-                window.OCTAVE.trendingData = { timestamp: now, tracks: trendingTracks };
+                window.OCTAVE.trendingData = {
+                    timestamp: now,
+                    tracks: trendingTracks
+                };
                 window.saveCache();
             }
             grid.innerHTML = '';
@@ -351,10 +359,10 @@ window.fetchTrendingMusic = async () => {
                 grid.appendChild(el);
             });
         } else {
-            grid.innerHTML = '<div style="color: var(--text-secondary); font-size: 13px;">Charts currently busy. Refresh to retry.</div>';
+            grid.innerHTML = '<div style="color: var(--text-secondary); font-size: 13px;">Busy. Refresh.</div>';
         }
-    } catch(e) {
-        grid.innerHTML = '<div style="color: var(--text-secondary); font-size: 13px;">Charts unavailable.</div>';
+    } catch (e) {
+        grid.innerHTML = '<div style="color: var(--text-secondary); font-size: 13px;">Unavailable.</div>';
     }
 };
 
@@ -363,11 +371,12 @@ window.renderHome = () => {
     let greeting = 'Good evening';
     if (hour >= 5 && hour < 12) greeting = 'Good morning';
     else if (hour >= 12 && hour < 17) greeting = 'Good afternoon';
-    const greetingEl = document.getElementById('time-greeting');
-    if (greetingEl) greetingEl.textContent = greeting;
+    if (document.getElementById('time-greeting')) document.getElementById('time-greeting').textContent = greeting;
+
     const recentGrid = document.getElementById('home-recent-grid');
     const playlistsDiv = document.getElementById('home-playlists');
     if (!recentGrid || !playlistsDiv) return;
+
     if (window.OCTAVE.recentPlayed.length > 0) {
         recentGrid.innerHTML = '';
         window.OCTAVE.recentPlayed.forEach(track => {
@@ -378,10 +387,11 @@ window.renderHome = () => {
             recentGrid.appendChild(el);
         });
     }
+
     if (window.fetchTrendingMusic) window.fetchTrendingMusic();
+
     const recsGrid = document.getElementById('home-recs-grid');
-    const recsSection = document.getElementById('recommended-section');
-    if (recsGrid && recsSection) {
+    if (recsGrid) {
         if (window.OCTAVE.dailyRecs && window.OCTAVE.dailyRecs.tracks.length > 0) {
             recsGrid.innerHTML = '';
             window.OCTAVE.dailyRecs.tracks.forEach(track => {
@@ -393,25 +403,49 @@ window.renderHome = () => {
             });
         }
     }
+
     if (window.fetchDailyRecommendations) window.fetchDailyRecommendations();
+
     const likedCount = Object.keys(window.OCTAVE.liked).length;
     playlistsDiv.innerHTML = `
         <div class="list-item" id="open-discover-mix" style="margin-bottom: 8px;">
-            <div class="list-art shadow-heavy" style="background: linear-gradient(135deg, #8a2387, #e94057, #f27121); display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff;"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
-            <div class="list-info"><div class="list-title">Auto-DJ Discover Mix</div><div class="list-subtitle">Endless tracks based on your taste</div></div>
+            <div class="list-art shadow-heavy" style="background: linear-gradient(135deg, #8a2387, #e94057, #f27121); display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff;">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+            </div>
+            <div class="list-info">
+                <div class="list-title">Auto-DJ Discover Mix</div>
+                <div class="list-subtitle">Endless tracks based on taste</div>
+            </div>
         </div>
         <div class="list-item" id="open-liked-songs">
-            <div class="list-art shadow-heavy" style="background: linear-gradient(135deg, var(--accent), #0b5c26); display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff;"><i class="fa-solid fa-heart"></i></div>
-            <div class="list-info"><div class="list-title">Liked Songs</div><div class="list-subtitle">${likedCount} tracks saved</div></div>
+            <div class="list-art shadow-heavy" style="background: linear-gradient(135deg, var(--accent), #0b5c26); display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff;">
+                <i class="fa-solid fa-heart"></i>
+            </div>
+            <div class="list-info">
+                <div class="list-title">Liked Songs</div>
+                <div class="list-subtitle">${likedCount} tracks saved</div>
+            </div>
         </div>
     `;
-    document.getElementById('open-discover-mix').addEventListener('click', () => { if(window.generateDiscoverMix) window.generateDiscoverMix(); });
+
+    document.getElementById('open-discover-mix').addEventListener('click', () => {
+        if (window.generateDiscoverMix) window.generateDiscoverMix();
+    });
     document.getElementById('open-liked-songs').addEventListener('click', window.renderLikedSongs);
+
     Object.keys(window.OCTAVE.playlists).forEach(plName => {
-        const pl = window.OCTAVE.playlists[plName];
         const el = document.createElement('div');
         el.className = 'list-item';
-        el.innerHTML = `<div class="list-art shadow-heavy" style="background: #2a2d36; display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--text-secondary);"><i class="fa-solid fa-list"></i></div><div class="list-info"><div class="list-title">${window.escapeHTML(plName)}</div><div class="list-subtitle">${pl.length} tracks</div></div><button class="icon-btn" style="color: var(--text-secondary);"><i class="fa-solid fa-chevron-right"></i></button>`;
+        el.innerHTML = `
+            <div class="list-art shadow-heavy" style="background: #2a2d36; display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--text-secondary);">
+                <i class="fa-solid fa-list"></i>
+            </div>
+            <div class="list-info">
+                <div class="list-title">${window.escapeHTML(plName)}</div>
+                <div class="list-subtitle">${window.OCTAVE.playlists[plName].length} tracks</div>
+            </div>
+            <button class="icon-btn"><i class="fa-solid fa-chevron-right"></i></button>
+        `;
         el.addEventListener('click', () => window.renderPlaylistDetail(plName));
         playlistsDiv.appendChild(el);
     });
@@ -419,13 +453,21 @@ window.renderHome = () => {
 
 function renderLibrary() {
     const lib = document.getElementById('lib-playlists');
-    if(!lib) return;
-    lib.innerHTML = Object.keys(window.OCTAVE.playlists).length > 0 ? '' : '<div class="empty-state-text">Create or import a playlist to see it here.</div>';
+    if (!lib) return;
+    lib.innerHTML = Object.keys(window.OCTAVE.playlists).length > 0 ? '' : '<div class="empty-state-text">Create or import a playlist.</div>';
     Object.keys(window.OCTAVE.playlists).forEach(plName => {
-        const pl = window.OCTAVE.playlists[plName];
         const el = document.createElement('div');
         el.className = 'list-item';
-        el.innerHTML = `<div class="list-art shadow-heavy" style="background: #2a2d36; display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--text-secondary);"><i class="fa-solid fa-list"></i></div><div class="list-info"><div class="list-title">${window.escapeHTML(plName)}</div><div class="list-subtitle">${pl.length} tracks</div></div><i class="fa-solid fa-chevron-right" style="color: var(--text-secondary);"></i>`;
+        el.innerHTML = `
+            <div class="list-art shadow-heavy" style="background: #2a2d36; display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--text-secondary);">
+                <i class="fa-solid fa-list"></i>
+            </div>
+            <div class="list-info">
+                <div class="list-title">${window.escapeHTML(plName)}</div>
+                <div class="list-subtitle">${window.OCTAVE.playlists[plName].length} tracks</div>
+            </div>
+            <i class="fa-solid fa-chevron-right" style="color: var(--text-secondary);"></i>
+        `;
         el.addEventListener('click', () => window.renderPlaylistDetail(plName));
         lib.appendChild(el);
     });
@@ -435,7 +477,6 @@ window.renderPlaylistDetail = (plName) => {
     const pl = window.OCTAVE.playlists[plName];
     if (!pl) return;
     const dynamicView = document.getElementById('dynamic-view');
-    let totalPlays = pl.reduce((sum, track) => sum + (window.OCTAVE.playStats[track.videoId] || 0), 0);
     dynamicView.innerHTML = `
         <div style="padding: 40px 20px 30px; background: linear-gradient(180deg, rgba(30,215,96,0.1) 0%, var(--bg-deep) 100%);">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
@@ -445,27 +486,40 @@ window.renderPlaylistDetail = (plName) => {
                 </div>
                 <button class="icon-btn" onclick="window.deletePlaylist('${plName}')" style="color: #ff4444; font-size: 20px;"><i class="fa-solid fa-trash-can"></i></button>
             </div>
-            <div style="color: var(--text-secondary); font-size: 14px; margin-bottom: 24px;">${pl.length} tracks • ${totalPlays} lifetime plays</div>
+            <div style="color: var(--text-secondary); font-size: 14px; margin-bottom: 24px;">${pl.length} tracks</div>
             <div style="display: flex; gap: 12px;">
-                <button class="btn-primary" onclick="window.playPlaylist('${plName}')" style="flex: 1; padding: 14px; border-radius: 100px; display: flex; align-items: center; justify-content: center; gap: 8px;"><i class="fa-solid fa-play"></i> Play All</button>
-                <button class="btn-secondary" onclick="if(window.smartShufflePlaylist) window.smartShufflePlaylist('${plName}')" style="flex: 1; padding: 14px; border-radius: 100px; display: flex; align-items: center; justify-content: center; gap: 8px; border-color: var(--accent); color: var(--accent);"><i class="fa-solid fa-wand-magic-sparkles"></i> Smart Shuffle</button>
+                <button class="btn-primary" onclick="window.playPlaylist('${plName}')" style="flex: 1; border-radius: 100px; display: flex; align-items: center; justify-content: center; gap: 8px;"><i class="fa-solid fa-play"></i> Play All</button>
+                <button class="btn-secondary" onclick="if(window.smartShufflePlaylist) window.smartShufflePlaylist('${plName}')" style="flex: 1; border-radius: 100px; display: flex; align-items: center; justify-content: center; gap: 8px; border-color: var(--accent); color: var(--accent);"><i class="fa-solid fa-wand-magic-sparkles"></i> Smart Shuffle</button>
             </div>
         </div>
         <div class="vertical-list" id="playlist-detail-list" style="padding: 0 20px;"></div>
         <div class="bottom-spacer"></div>
     `;
+
     const listContainer = document.getElementById('playlist-detail-list');
-    if (pl.length === 0) listContainer.innerHTML = '<div class="empty-state-text">This playlist is empty. Add songs via Search.</div>';
-    else {
+    if (pl.length === 0) {
+        listContainer.innerHTML = '<div class="empty-state-text">Playlist empty.</div>';
+    } else {
         pl.forEach((track, index) => {
-            const stats = window.OCTAVE.playStats[track.videoId] || 0;
             const el = document.createElement('div');
             el.style.cssText = 'display: flex; align-items: center; gap: 14px; padding: 12px; background: var(--bg-surface); border-radius: 8px; margin-bottom: 12px; cursor: pointer;';
-            el.innerHTML = `<img src="${track.thumb}" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover;"><div style="flex: 1; min-width: 0;"><div style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${window.escapeHTML(track.title)}</div><div style="font-size: 12px; color: var(--text-secondary);">${window.escapeHTML(track.author)} • <i class="fa-solid fa-fire" style="color: #ff5000; font-size: 10px;"></i> ${stats} plays</div></div><button class="icon-btn remove-btn" style="color: #ff4444; padding: 10px; z-index: 10;"><i class="fa-solid fa-xmark"></i></button>`;
+            el.innerHTML = `
+                <img src="${track.thumb}" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover;">
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${window.escapeHTML(track.title)}</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">${window.escapeHTML(track.author)}</div>
+                </div>
+                <button class="icon-btn remove-btn" style="color: #ff4444;"><i class="fa-solid fa-xmark"></i></button>
+            `;
             el.addEventListener('click', (e) => {
                 const removeBtn = e.target.closest('.remove-btn');
-                if (removeBtn) { e.stopPropagation(); window.removeFromPlaylist(plName, index); return; }
-                window.OCTAVE.queue = [...pl]; window.playTrackByIndex(index);
+                if (removeBtn) {
+                    e.stopPropagation();
+                    window.removeFromPlaylist(plName, index);
+                    return;
+                }
+                window.OCTAVE.queue = [...pl];
+                window.playTrackByIndex(index);
             });
             listContainer.appendChild(el);
         });
@@ -475,28 +529,45 @@ window.renderPlaylistDetail = (plName) => {
 window.renderLikedSongs = () => {
     const pl = Object.values(window.OCTAVE.liked);
     const dynamicView = document.getElementById('dynamic-view');
-    let totalPlays = pl.reduce((sum, track) => sum + (window.OCTAVE.playStats[track.videoId] || 0), 0);
     dynamicView.innerHTML = `
         <div style="padding: 40px 20px 30px; background: linear-gradient(180deg, rgba(30,215,96,0.15) 0%, var(--bg-deep) 100%);">
-            <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 24px;"><button class="icon-btn" onclick="document.querySelector('.nav-item.active').click()"><i class="fa-solid fa-arrow-left"></i></button><h1 style="font-size: 28px; font-weight: 800;">Liked Songs</h1></div>
-            <div style="color: var(--text-secondary); font-size: 14px; margin-bottom: 24px;">${pl.length} tracks • ${totalPlays} lifetime plays</div>
-            <div style="display: flex; gap: 12px;"><button class="btn-primary" onclick="window.OCTAVE.queue = Object.values(window.OCTAVE.liked); if(window.OCTAVE.queue.length>0) window.playTrackByIndex(0);" style="flex: 1; padding: 14px; border-radius: 100px; display: flex; align-items: center; justify-content: center; gap: 8px;"><i class="fa-solid fa-play"></i> Play All</button></div>
+            <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 24px;">
+                <button class="icon-btn" onclick="document.querySelector('.nav-item.active').click()"><i class="fa-solid fa-arrow-left"></i></button>
+                <h1 style="font-size: 28px; font-weight: 800;">Liked Songs</h1>
+            </div>
+            <div style="color: var(--text-secondary); font-size: 14px; margin-bottom: 24px;">${pl.length} tracks</div>
+            <div style="display: flex; gap: 12px;">
+                <button class="btn-primary" onclick="window.OCTAVE.queue = Object.values(window.OCTAVE.liked); if(window.OCTAVE.queue.length>0) window.playTrackByIndex(0);" style="flex: 1; border-radius: 100px; display: flex; align-items: center; justify-content: center; gap: 8px;"><i class="fa-solid fa-play"></i> Play All</button>
+            </div>
         </div>
         <div class="vertical-list" id="playlist-detail-list" style="padding: 0 20px;"></div>
         <div class="bottom-spacer"></div>
     `;
+
     const listContainer = document.getElementById('playlist-detail-list');
-    if (pl.length === 0) listContainer.innerHTML = '<div class="empty-state-text">No liked songs yet. Tap the heart on any track.</div>';
-    else {
+    if (pl.length === 0) {
+        listContainer.innerHTML = '<div class="empty-state-text">No liked songs yet.</div>';
+    } else {
         pl.forEach((track, index) => {
-            const stats = window.OCTAVE.playStats[track.videoId] || 0;
             const el = document.createElement('div');
             el.style.cssText = 'display: flex; align-items: center; gap: 14px; padding: 12px; background: var(--bg-surface); border-radius: 8px; margin-bottom: 12px; cursor: pointer;';
-            el.innerHTML = `<img src="${track.thumb}" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover;"><div style="flex: 1; min-width: 0;"><div style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${window.escapeHTML(track.title)}</div><div style="font-size: 12px; color: var(--text-secondary);">${window.escapeHTML(track.author)} • <i class="fa-solid fa-fire" style="color: #ff5000; font-size: 10px;"></i> ${stats} plays</div></div><button class="icon-btn remove-btn" style="color: var(--accent); padding: 10px; z-index: 10;"><i class="fa-solid fa-heart"></i></button>`;
+            el.innerHTML = `
+                <img src="${track.thumb}" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover;">
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${window.escapeHTML(track.title)}</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">${window.escapeHTML(track.author)}</div>
+                </div>
+                <button class="icon-btn remove-btn" style="color: var(--accent);"><i class="fa-solid fa-heart"></i></button>
+            `;
             el.addEventListener('click', (e) => {
                 const removeBtn = e.target.closest('.remove-btn');
-                if (removeBtn) { e.stopPropagation(); window.removeFromLiked(track.videoId); return; }
-                window.OCTAVE.queue = [...pl]; window.playTrackByIndex(index);
+                if (removeBtn) {
+                    e.stopPropagation();
+                    window.removeFromLiked(track.videoId);
+                    return;
+                }
+                window.OCTAVE.queue = [...pl];
+                window.playTrackByIndex(index);
             });
             listContainer.appendChild(el);
         });
@@ -507,29 +578,43 @@ function bindSearch() {
     const input = document.getElementById('searchInput');
     const resContainer = document.getElementById('searchResults');
     const recentList = document.getElementById('search-recent-list');
-    if(recentList) {
-        if(window.OCTAVE.recentSearches.length === 0) recentList.innerHTML = '<div class="empty-state-text">No recent searches.</div>';
-        else { recentList.innerHTML = ''; window.OCTAVE.recentSearches.forEach(track => recentList.appendChild(buildTrackItem(track))); }
+    if (recentList) {
+        if (window.OCTAVE.recentSearches.length === 0) {
+            recentList.innerHTML = '<div class="empty-state-text">No searches.</div>';
+        } else {
+            recentList.innerHTML = '';
+            window.OCTAVE.recentSearches.forEach(track => recentList.appendChild(buildTrackItem(track)));
+        }
     }
+
     let timer;
     input.addEventListener('input', (e) => {
         clearTimeout(timer);
         const query = e.target.value.trim();
         if (!query) {
             document.getElementById('search-default-view').style.display = 'block';
-            Array.from(resContainer.children).forEach(c => { if(c.id !== 'search-default-view') c.remove(); });
+            Array.from(resContainer.children).forEach(c => {
+                if (c.id !== 'search-default-view') c.remove();
+            });
             return;
         }
+
         document.getElementById('search-default-view').style.display = 'none';
-        Array.from(resContainer.children).forEach(c => { if(c.id !== 'search-default-view') c.remove(); });
+        Array.from(resContainer.children).forEach(c => {
+            if (c.id !== 'search-default-view') c.remove();
+        });
+
         const loader = document.createElement('div');
         loader.innerHTML = '<div style="text-align:center; padding: 20px;"><i class="fa-solid fa-spinner fa-spin" style="font-size:24px; color:var(--accent);"></i></div>';
         resContainer.appendChild(loader);
+
         timer = setTimeout(async () => {
             const results = await window.performSearch(query);
             loader.remove();
             if (results.length === 0) {
-                const empty = document.createElement('div'); empty.className = 'empty-state-text'; empty.innerText = 'No results found.';
+                const empty = document.createElement('div');
+                empty.className = 'empty-state-text';
+                empty.innerText = 'No results.';
                 resContainer.appendChild(empty);
                 return;
             }
@@ -541,15 +626,31 @@ function bindSearch() {
 function buildTrackItem(track) {
     const el = document.createElement('div');
     el.style.cssText = 'display: flex; align-items: center; gap: 14px; padding: 12px; background: var(--bg-surface); border-radius: 8px; margin-bottom: 12px; cursor: pointer;';
-    el.innerHTML = `<img src="${track.thumb}" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover;"><div style="flex: 1; min-width: 0;"><div style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${window.escapeHTML(track.title)}</div><div style="font-size: 12px; color: var(--text-secondary);">${window.escapeHTML(track.author)}</div></div><button class="track-opts-btn"><i class="fa-solid fa-ellipsis-vertical"></i></button>`;
-    el.addEventListener('click', (e) => { if(e.target.closest('.track-opts-btn')) return; window.playTrack(track); });
-    el.querySelector('.track-opts-btn').addEventListener('click', (e) => { e.stopPropagation(); openTrackOptions(track); });
+    el.innerHTML = `
+        <img src="${track.thumb}" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover;">
+        <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${window.escapeHTML(track.title)}</div>
+            <div style="font-size: 12px; color: var(--text-secondary);">${window.escapeHTML(track.author)}</div>
+        </div>
+        <button class="track-opts-btn"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+    `;
+    el.addEventListener('click', (e) => {
+        if (e.target.closest('.track-opts-btn')) return;
+        window.playTrack(track);
+    });
+    el.querySelector('.track-opts-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        openTrackOptions(track);
+    });
     return el;
 }
 
 function handleBravePrompt() {
     if (!localStorage.getItem('bravePromptShown')) setTimeout(() => document.getElementById('brave-modal').classList.add('active'), 1500);
-    const dismissBrave = () => { localStorage.setItem('bravePromptShown', 'true'); document.getElementById('brave-modal').classList.remove('active'); };
+    const dismissBrave = () => {
+        localStorage.setItem('bravePromptShown', 'true');
+        document.getElementById('brave-modal').classList.remove('active');
+    };
     document.getElementById('close-brave').addEventListener('click', dismissBrave);
     document.getElementById('get-brave').addEventListener('click', dismissBrave);
 }
@@ -557,13 +658,14 @@ function handleBravePrompt() {
 function bindHomeModals() {
     const openPl = document.getElementById('open-create-playlist');
     const plModal = document.getElementById('playlist-modal');
-    if(openPl) openPl.addEventListener('click', () => plModal.classList.add('active'));
+    if (openPl) openPl.addEventListener('click', () => plModal.classList.add('active'));
     document.getElementById('close-playlist').addEventListener('click', () => plModal.classList.remove('active'));
+
     document.getElementById('save-playlist').addEventListener('click', () => {
         const name = document.getElementById('playlist-name').value.trim();
-        if(name !== '' && !window.OCTAVE.playlists[name]) {
-            window.OCTAVE.playlists[name] =[];
-            localStorage.setItem('octave_data', JSON.stringify({ ...JSON.parse(localStorage.getItem('octave_data')||'{}'), playlists: window.OCTAVE.playlists }));
+        if (name !== '' && !window.OCTAVE.playlists[name]) {
+            window.OCTAVE.playlists[name] = [];
+            window.saveCache();
             document.getElementById('playlist-name').value = '';
             plModal.classList.remove('active');
             window.renderHome();
@@ -581,7 +683,10 @@ function openTrackOptions(track) {
 }
 
 document.getElementById('opt-like-track').addEventListener('click', () => {
-    if(window.OCTAVE.activeTrackForOptions) { window.toggleLike(window.OCTAVE.activeTrackForOptions); document.getElementById('track-options-modal').classList.remove('active'); }
+    if (window.OCTAVE.activeTrackForOptions) {
+        window.toggleLike(window.OCTAVE.activeTrackForOptions);
+        document.getElementById('track-options-modal').classList.remove('active');
+    }
 });
 
 document.getElementById('opt-add-playlist').addEventListener('click', () => {
@@ -589,16 +694,18 @@ document.getElementById('opt-add-playlist').addEventListener('click', () => {
     const plModal = document.getElementById('select-playlist-modal');
     const list = document.getElementById('playlist-selection-list');
     if (Object.keys(window.OCTAVE.playlists).length === 0) {
-        list.innerHTML = '<div class="empty-state-text">No playlists created yet. Go to Home to create one.</div>';
+        list.innerHTML = '<div class="empty-state-text">No playlists.</div>';
     } else {
         list.innerHTML = '';
         Object.keys(window.OCTAVE.playlists).forEach(plName => {
-            const el = document.createElement('div'); el.className = 'drawer-item'; el.innerHTML = `<i class="fa-solid fa-list"></i> <span>${window.escapeHTML(plName)}</span>`;
+            const el = document.createElement('div');
+            el.className = 'drawer-item';
+            el.innerHTML = `<i class="fa-solid fa-list"></i> <span>${window.escapeHTML(plName)}</span>`;
             el.addEventListener('click', () => {
                 window.OCTAVE.playlists[plName].push(window.OCTAVE.activeTrackForOptions);
-                localStorage.setItem('octave_data', JSON.stringify({ ...JSON.parse(localStorage.getItem('octave_data')||'{}'), playlists: window.OCTAVE.playlists }));
+                window.saveCache();
                 plModal.classList.remove('active');
-                if(window.renderPlaylistDetail && document.querySelector('h1').textContent === plName) window.renderPlaylistDetail(plName);
+                if (window.renderPlaylistDetail && document.querySelector('h1').textContent === plName) window.renderPlaylistDetail(plName);
             });
             list.appendChild(el);
         });
@@ -615,42 +722,65 @@ document.getElementById('start-yt-import')?.addEventListener('click', async () =
     const urlInput = document.getElementById('yt-playlist-url').value.trim();
     if (!urlInput) return;
     let playlistId = '';
-    try { const urlObj = new URL(urlInput); playlistId = urlObj.searchParams.get('list'); } catch(e) { if (urlInput.startsWith('PL') && urlInput.length > 15) { playlistId = urlInput; } }
-    if (!playlistId) { alert("Invalid YouTube Playlist URL."); return; }
-    const modal = document.getElementById('yt-import-modal');
+    try {
+        const urlObj = new URL(urlInput);
+        playlistId = urlObj.searchParams.get('list');
+    } catch (e) {
+        if (urlInput.startsWith('PL') && urlInput.length > 15) {
+            playlistId = urlInput;
+        }
+    }
+    if (!playlistId) {
+        alert("Invalid URL.");
+        return;
+    }
     const btn = document.getElementById('start-yt-import');
-    const originalText = btn.innerHTML;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
     btn.disabled = true;
+
     let success = false;
     for (let i = 0; i < window.INVIDIOUS.length; i++) {
         const base = window.INVIDIOUS[(window.invIdx + i) % window.INVIDIOUS.length];
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
         try {
-            const r = await fetch(`${base}/api/v1/playlists/${playlistId}`, { signal: controller.signal });
+            const r = await fetch(`${base}/api/v1/playlists/${playlistId}`, {
+                signal: controller.signal
+            });
             clearTimeout(timeoutId);
             if (r.ok) {
                 const data = await r.json();
                 if (data.videos && data.videos.length > 0) {
-                    const newPlaylistName = data.title || "Imported Playlist";
-                    let finalName = newPlaylistName;
+                    let finalName = data.title || "Imported";
                     let count = 1;
-                    while(window.OCTAVE.playlists[finalName]) { finalName = `${newPlaylistName} (${count})`; count++; }
-                    window.OCTAVE.playlists[finalName] = data.videos.map(v => ({ videoId: v.videoId, title: v.title, author: v.author, thumb: (v.videoThumbnails && v.videoThumbnails.length > 0) ? v.videoThumbnails[0].url : '' }));
+                    while (window.OCTAVE.playlists[finalName]) {
+                        finalName = `${data.title} (${count})`;
+                        count++;
+                    }
+                    window.OCTAVE.playlists[finalName] = data.videos.map(v => ({
+                        videoId: v.videoId,
+                        title: v.title,
+                        author: v.author,
+                        thumb: (v.videoThumbnails && v.videoThumbnails.length > 0) ? v.videoThumbnails[0].url : ''
+                    }));
                     window.saveCache();
                     success = true;
-                    alert(`Successfully imported ${data.videos.length} tracks to "${finalName}"!`);
-                    modal.classList.remove('active');
+                    alert(`Imported ${data.videos.length} tracks!`);
+                    document.getElementById('yt-import-modal').classList.remove('active');
                     document.getElementById('yt-playlist-url').value = '';
-                    const activeNav = document.querySelector('.nav-item.active');
-                    if(activeNav && activeNav.getAttribute('data-tab') === 'library') { document.querySelector('.nav-item[data-tab="library"]').click(); }
+                    if (document.querySelector('.nav-item.active').getAttribute('data-tab') === 'library') {
+                        renderLibrary();
+                    }
                     break;
                 }
             }
-        } catch (e) { continue; }
+        } catch (e) {
+            continue;
+        }
     }
-    if (!success) { alert("Failed to fetch playlist. Ensure the playlist is public and try again."); }
-    btn.innerHTML = originalText;
+    if (!success) {
+        alert("Failed. Try again.");
+    }
+    btn.innerHTML = 'Import';
     btn.disabled = false;
 });
