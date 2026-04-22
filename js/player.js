@@ -1,18 +1,7 @@
-// ─── PAGE VISIBILITY OVERRIDE ────────────────────────────────────────────────
-// YouTube iframe reads document.hidden from OUR document (not its own).
-// We define the rule once: this tab is always visible. Always.
-// YouTube never sees a hidden state, so it never auto-pauses.
-Object.defineProperty(document, 'hidden', { get: () => false, configurable: true });
-Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true });
-// Block visibilitychange from ever reaching the iframe
-document.addEventListener('visibilitychange', e => e.stopImmediatePropagation(), true);
-// ─────────────────────────────────────────────────────────────────────────────
-
 // ============================================================
-// player.js — Octave IFrame Audio Engine
-// Restored pure client-side YouTube IFrame for instant loading.
-// 10-point tracking, Wikipedia fallback, and Liquid Shadows preserved.
-// Use Brave Browser for background playback.
+// player.js — Octave Hybrid Audio Engine
+// Detects Brave Browser for instant IFrame playback.
+// Falls back to Native <audio> Proxy for Chrome/Safari background play.
 // ============================================================
 
 window.escapeHTML = (str) => {
@@ -41,6 +30,20 @@ window.OCTAVE = {
     isNextTrackManual: true, 
     activeTrackViewed: false
 };
+
+// ─── HYBRID ENGINE ROUTER ──────────────────────────────────────────────────
+window.AUDIO_ENGINE = 'native'; // Default to proxy for Chrome/Safari
+
+if (navigator.brave && navigator.brave.isBrave) {
+    navigator.brave.isBrave().then(isBrave => {
+        if (isBrave) {
+            window.AUDIO_ENGINE = 'iframe';
+            console.log("Octave: Brave detected. Using Instant IFrame Engine.");
+        }
+    });
+} else {
+    console.log("Octave: Chrome/Safari detected. Using Native Proxy Engine.");
+}
 
 window.initTrackStats = (videoId) => {
     if (!window.OCTAVE.playStats[videoId]) {
@@ -142,90 +145,108 @@ fetch('https://api.invidious.io/instances.json?sort_by=health')
 
 window.invIdx = Math.floor(Math.random() * window.INVIDIOUS.length);
 
-// ─── AUDIO SESSION ENGINE ────────────────────────────────────────────────────
-// Chrome only keeps a tab alive in background if it detects REAL audio output.
-// A zero-filled silent buffer is detected as silence and throttled.
-// Solution: 40Hz sine wave (below human hearing) at gain 0.001 — inaudible
-// but a real non-zero signal Chrome recognises as active audio output.
-// Combined with a Service Worker ping, this prevents tab suspension entirely.
-let _audioCtx = null;
-let _oscillator = null;
-let _gainNode = null;
-let _swPingInterval = null;
+// ─── NATIVE ENGINE SETUP (CHROME/SAFARI) ──────────────────────────────────────
+const AUDIO = new Audio();
+AUDIO.preload = 'auto';
 
-function startSilentKeepAlive() {
-    if (_oscillator) return;
+let streamQueue = [];   
+let streamQueueIdx = 0;
+let streamTimeout = null;
+
+let audioUnlocked = false;
+function unlockAudioForSafari() {
+    if (audioUnlocked) return;
+    audioUnlocked = true;
     try {
-        _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-        // Self-healing: if Android ever suspends the context, immediately resume
-        _audioCtx.onstatechange = () => {
-            if (_audioCtx && _audioCtx.state === 'suspended') {
-                _audioCtx.resume();
-            }
-        };
-
-        // 40Hz oscillator — below the human hearing threshold (~20Hz cutoff)
-        // Non-zero signal: Chrome sees active audio and will NOT throttle this tab
-        _oscillator = _audioCtx.createOscillator();
-        _gainNode = _audioCtx.createGain();
-        _oscillator.type = 'sine';
-        _oscillator.frequency.value = 40;     // sub-bass, inaudible on phone speakers
-        _gainNode.gain.value = 0.001;          // ~60dB below audible — truly silent to ears
-        _oscillator.connect(_gainNode);
-        _gainNode.connect(_audioCtx.destination);
-        _oscillator.start(0);
-
-        // Ping the Service Worker every 25s to keep the SW thread alive
-        // The SW runs in a separate thread — survives tab suspension
-        if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-            _swPingInterval = setInterval(() => {
-                navigator.serviceWorker.controller.postMessage('keepalive');
-            }, 25000);
-        }
-    } catch (e) {
-        console.warn('Audio session engine failed:', e);
-    }
-}
-
-function stopSilentKeepAlive() {
-    try {
-        clearInterval(_swPingInterval); _swPingInterval = null;
-        if (_audioCtx) _audioCtx.onstatechange = null;
-        if (_oscillator) { _oscillator.stop(); _oscillator = null; }
-        if (_gainNode) { _gainNode.disconnect(); _gainNode = null; }
-        if (_audioCtx) { _audioCtx.close(); _audioCtx = null; }
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const buf = ctx.createBuffer(1, 1, 22050);
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.connect(ctx.destination);
+        src.start(0);
+        ctx.resume().catch(() => {});
     } catch (e) {}
 }
+document.addEventListener('click', unlockAudioForSafari, { once: true });
+document.addEventListener('touchstart', unlockAudioForSafari, { once: true });
 
-// ─── SERVICE WORKER REGISTRATION ─────────────────────────────────────────────
-// SW runs in a separate thread independent of the tab's JS thread.
-// When Android suspends the tab, the SW stays alive and holds Chrome's process
-// open — preventing the tab from being fully killed.
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js', { scope: '/' })
-        .then(reg => {
-            // Attempt Background Sync registration for extra keepalive
-            if ('SyncManager' in window) {
-                reg.sync.register('octave-keepalive').catch(() => {});
-            }
-        })
-        .catch(e => console.warn('SW registration failed:', e));
-}
-
-// Web Audio Context must be resumed after a user gesture (browser policy).
-// We hook into the first real play action to activate it.
-function resumeAudioContext() {
-    if (_audioCtx && _audioCtx.state === 'suspended') {
-        _audioCtx.resume();
+function buildStreamQueue(videoId) {
+    const itags = [140, 251, 18];
+    const urls = [];
+    for (let i = 0; i < window.INVIDIOUS.length; i++) {
+        const base = window.INVIDIOUS[(window.invIdx + i) % window.INVIDIOUS.length];
+        itags.forEach(itag => {
+            urls.push(`${base}/latest_version?id=${videoId}&itag=${itag}&local=true`);
+        });
     }
+    return urls;
 }
 
-// ─── IFRAME ENGINE ────────────────────────────────────────────────────────────
-let YTP = null,
-    ytReady = false,
-    progressTimer = null,
-    sleepTimerId = null;
+const tryNextStream = () => {
+    clearTimeout(streamTimeout);
+    if (streamQueueIdx >= streamQueue.length) {
+        console.warn('Octave: All stream sources failed.');
+        updatePlayIcons('fa-solid fa-play');
+        window.OCTAVE.isPlaying = false;
+        return;
+    }
+    AUDIO.src = streamQueue[streamQueueIdx];
+    AUDIO.load();
+    AUDIO.play().catch(() => {});
+    
+    streamTimeout = setTimeout(() => {
+        if (!window.OCTAVE.isPlaying) {
+            console.warn('Stream too slow, skipping to next server...');
+            streamQueueIdx++;
+            tryNextStream();
+        }
+    }, 4000);
+};
+
+AUDIO.addEventListener('playing', () => {
+    if (window.AUDIO_ENGINE !== 'native') return;
+    clearTimeout(streamTimeout); 
+    window.OCTAVE.isPlaying = true;
+    updatePlayIcons('fa-solid fa-pause');
+    startProgressTracking();
+    syncMediaSessionPosition();
+});
+
+AUDIO.addEventListener('pause', () => {
+    if (window.AUDIO_ENGINE !== 'native') return;
+    window.OCTAVE.isPlaying = false;
+    updatePlayIcons('fa-solid fa-play');
+    clearInterval(progressTimer);
+});
+
+AUDIO.addEventListener('ended', () => {
+    if (window.AUDIO_ENGINE !== 'native') return;
+    handleTrackEnded();
+});
+
+AUDIO.addEventListener('error', () => {
+    if (window.AUDIO_ENGINE !== 'native') return;
+    clearTimeout(streamTimeout);
+    streamQueueIdx++;
+    if (streamQueueIdx < streamQueue.length) {
+        AUDIO.src = streamQueue[streamQueueIdx];
+        AUDIO.load();
+        AUDIO.play().catch(() => {});
+        streamTimeout = setTimeout(() => {
+            if (!window.OCTAVE.isPlaying) {
+                streamQueueIdx++;
+                AUDIO.dispatchEvent(new Event('error'));
+            }
+        }, 4000);
+    } else {
+        updatePlayIcons('fa-solid fa-play');
+        window.OCTAVE.isPlaying = false;
+    }
+});
+
+// ─── IFRAME ENGINE SETUP (BRAVE) ──────────────────────────────────────────────
+let YTP = null;
+let ytReady = false;
 
 const script = document.createElement('script');
 script.src = 'https://www.youtube.com/iframe_api';
@@ -245,12 +266,9 @@ window.onYouTubeIframeAPIReady = () => {
             onReady: e => {
                 ytReady = true;
                 e.target.setVolume(100);
-                // Restores last played track UI and audio cue on startup
-                if (window.OCTAVE.currentIndex >= 0 && window.OCTAVE.queue.length > 0) {
+                if (window.AUDIO_ENGINE === 'iframe' && window.OCTAVE.currentIndex >= 0 && window.OCTAVE.queue.length > 0) {
                     const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
-                    updatePlayerUI(track);
                     YTP.cueVideoById({ videoId: track.videoId });
-                    updateMediaSession(track);
                 }
             },
             onStateChange: onYTS
@@ -259,30 +277,35 @@ window.onYouTubeIframeAPIReady = () => {
 };
 
 function onYTS(e) {
+    if (window.AUDIO_ENGINE !== 'iframe') return;
     if (e.data === YT.PlayerState.PLAYING) {
         window.OCTAVE.isPlaying = true;
         updatePlayIcons('fa-solid fa-pause');
         startProgressTracking();
-        startSilentKeepAlive();   // 🔇 hold audio session open for background play
-        resumeAudioContext();
         syncMediaSessionPosition();
     } else if (e.data === YT.PlayerState.PAUSED) {
         window.OCTAVE.isPlaying = false;
         updatePlayIcons('fa-solid fa-play');
         clearInterval(progressTimer);
-        stopSilentKeepAlive();    // 🔇 release audio session when paused
     } else if (e.data === YT.PlayerState.ENDED) {
-        window.OCTAVE.isPlaying = false;
-        
-        if (window.OCTAVE.currentIndex >= 0) {
-            const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
-            window.initTrackStats(track.videoId);
-            window.OCTAVE.playStats[track.videoId].completes++;
-            window.saveCache();
-        }
-
-        if (window.playNextLogic) window.playNextLogic();
+        handleTrackEnded();
     }
+}
+
+// ─── HYBRID LOGIC & SHARED CONTROLS ───────────────────────────────────────────
+let progressTimer = null;
+let sleepTimerId = null;
+
+function handleTrackEnded() {
+    window.OCTAVE.isPlaying = false;
+    clearInterval(progressTimer);
+    if (window.OCTAVE.currentIndex >= 0) {
+        const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
+        window.initTrackStats(track.videoId);
+        window.OCTAVE.playStats[track.videoId].completes++;
+        window.saveCache();
+    }
+    if (window.playNextLogic) window.playNextLogic();
 }
 
 function updatePlayIcons(iconClass) {
@@ -293,30 +316,44 @@ function updatePlayIcons(iconClass) {
 }
 
 window.togglePlay = () => {
-    if (!YTP || window.OCTAVE.currentIndex === -1) return;
-    resumeAudioContext(); // ensure AudioContext is live on user gesture
-    window.OCTAVE.isPlaying ? YTP.pauseVideo() : YTP.playVideo();
+    if (window.OCTAVE.currentIndex === -1) return;
+    
+    if (window.AUDIO_ENGINE === 'iframe') {
+        if (!YTP) return;
+        window.OCTAVE.isPlaying ? YTP.pauseVideo() : YTP.playVideo();
+    } else {
+        window.OCTAVE.isPlaying ? AUDIO.pause() : AUDIO.play().catch(() => {});
+    }
 };
 
 function startProgressTracking() {
     clearInterval(progressTimer);
     progressTimer = setInterval(() => {
-        if (YTP && window.OCTAVE.isPlaying) {
-            const current = YTP.getCurrentTime();
-            const total = YTP.getDuration();
-            if (total > 0) {
-                const percent = (current / total) * 100;
-                const miniProg = document.getElementById('mini-progress');
-                const fpProg = document.getElementById('fp-progress-fill');
-                const currTime = document.getElementById('fp-time-current');
-                const totTime = document.getElementById('fp-time-total');
-                if (miniProg) miniProg.style.width = `${percent}%`;
-                if (fpProg) fpProg.style.width = `${percent}%`;
-                if (currTime) currTime.textContent = formatTime(current);
-                if (totTime) totTime.textContent = formatTime(total);
-            }
+        if (!window.OCTAVE.isPlaying) return;
+        
+        let current = 0;
+        let total = 0;
+
+        if (window.AUDIO_ENGINE === 'iframe' && YTP && typeof YTP.getCurrentTime === 'function') {
+            current = YTP.getCurrentTime();
+            total = YTP.getDuration();
+        } else if (window.AUDIO_ENGINE === 'native') {
+            current = AUDIO.currentTime;
+            total = AUDIO.duration;
         }
-    }, 100);
+
+        if (total > 0 && !isNaN(total)) {
+            const percent = (current / total) * 100;
+            const miniProg = document.getElementById('mini-progress');
+            const fpProg = document.getElementById('fp-progress-fill');
+            const currTime = document.getElementById('fp-time-current');
+            const totTime = document.getElementById('fp-time-total');
+            if (miniProg) miniProg.style.width = `${percent}%`;
+            if (fpProg) fpProg.style.width = `${percent}%`;
+            if (currTime) currTime.textContent = formatTime(current);
+            if (totTime) totTime.textContent = formatTime(total);
+        }
+    }, 500);
 }
 
 function formatTime(seconds) {
@@ -349,26 +386,36 @@ function updateMediaSession(track) {
 
     try {
         navigator.mediaSession.setActionHandler('seekto', (details) => {
-            if (YTP && typeof YTP.seekTo === 'function') {
+            if (window.AUDIO_ENGINE === 'iframe' && YTP && typeof YTP.seekTo === 'function') {
                 YTP.seekTo(details.seekTime, true);
-                syncMediaSessionPosition();
+            } else if (window.AUDIO_ENGINE === 'native' && AUDIO.duration) {
+                AUDIO.currentTime = details.seekTime;
             }
+            syncMediaSessionPosition();
         });
     } catch (e) {}
 }
 
 function syncMediaSessionPosition() {
-    if ('mediaSession' in navigator && YTP && typeof YTP.getDuration === 'function') {
+    if (!('mediaSession' in navigator)) return;
+    let duration = 0;
+    let position = 0;
+
+    if (window.AUDIO_ENGINE === 'iframe' && YTP && typeof YTP.getDuration === 'function') {
+        duration = YTP.getDuration();
+        position = YTP.getCurrentTime();
+    } else if (window.AUDIO_ENGINE === 'native') {
+        duration = AUDIO.duration;
+        position = AUDIO.currentTime;
+    }
+
+    if (duration > 0 && !isNaN(duration)) {
         try {
-            const duration = YTP.getDuration();
-            const position = YTP.getCurrentTime();
-            if (duration > 0) {
-                navigator.mediaSession.setPositionState({
-                    duration: duration,
-                    playbackRate: 1,
-                    position: position
-                });
-            }
+            navigator.mediaSession.setPositionState({
+                duration: duration,
+                playbackRate: 1,
+                position: Math.min(position, duration)
+            });
         } catch (e) {}
     }
 }
@@ -402,8 +449,16 @@ window.playTrackByIndex = (index) => {
     window.saveCache();
 
     updatePlayerUI(track);
-    if (ytReady && YTP) YTP.loadVideoById({ videoId: track.videoId });
     updateMediaSession(track);
+
+    if (window.AUDIO_ENGINE === 'iframe') {
+        if (ytReady && YTP) YTP.loadVideoById({ videoId: track.videoId });
+    } else {
+        AUDIO.pause();
+        streamQueue = buildStreamQueue(track.videoId);
+        streamQueueIdx = 0;
+        tryNextStream();
+    }
 };
 
 window.playTrack = (track) => {
@@ -419,8 +474,16 @@ window.playTrack = (track) => {
 };
 
 window.playPrev = () => {
-    if (YTP && YTP.getCurrentTime() > 3) {
-        YTP.seekTo(0);
+    let current = 0;
+    if (window.AUDIO_ENGINE === 'iframe' && YTP && typeof YTP.getCurrentTime === 'function') {
+        current = YTP.getCurrentTime();
+    } else if (window.AUDIO_ENGINE === 'native') {
+        current = AUDIO.currentTime;
+    }
+
+    if (current > 3) {
+        if (window.AUDIO_ENGINE === 'iframe' && YTP) YTP.seekTo(0);
+        else if (window.AUDIO_ENGINE === 'native') AUDIO.currentTime = 0;
     } else if (window.OCTAVE.currentIndex > 0) {
         window.OCTAVE.isNextTrackManual = true;
         window.playTrackByIndex(window.OCTAVE.currentIndex - 1);
@@ -526,9 +589,7 @@ window.applyLiquidShadow = (imageSrc) => {
                 mini.style.background = `radial-gradient(circle at 0% 50%, rgba(${r}, ${g}, ${b}, 0.3) 0%, transparent 70%), var(--glass-bg)`;
                 mini.style.boxShadow = `0 10px 30px rgba(0,0,0,0.5), 0 0 15px rgba(${r}, ${g}, ${b}, 0.3)`;
             }
-        } catch (e) {
-            console.error("Liquid Shadow Sampling Failed", e);
-        }
+        } catch (e) {}
     };
     img.src = imageSrc;
 };
@@ -583,18 +644,25 @@ window.toggleLike = (track) => {
 };
 
 function seekToPosition(e, containerElement) {
-    if (!YTP || window.OCTAVE.currentIndex === -1 || !containerElement) return;
+    if (window.OCTAVE.currentIndex === -1 || !containerElement) return;
     const rect = containerElement.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const percentage = Math.max(0, Math.min(1, clickX / rect.width));
-    const totalTime = YTP.getDuration();
-    if (totalTime > 0) {
-        YTP.seekTo(totalTime * percentage, true);
+    
+    let totalTime = 0;
+    if (window.AUDIO_ENGINE === 'iframe' && YTP && typeof YTP.getDuration === 'function') {
+        totalTime = YTP.getDuration();
+        if (totalTime > 0) YTP.seekTo(totalTime * percentage, true);
+    } else if (window.AUDIO_ENGINE === 'native') {
+        totalTime = AUDIO.duration;
+        if (totalTime > 0 && !isNaN(totalTime)) AUDIO.currentTime = totalTime * percentage;
+    }
+
+    if (totalTime > 0 && !isNaN(totalTime)) {
         const fpFill = document.getElementById('fp-progress-fill');
         const miniFill = document.getElementById('mini-progress');
         if (fpFill) fpFill.style.width = `${percentage * 100}%`;
         if (miniFill) miniFill.style.width = `${percentage * 100}%`;
-
         syncMediaSessionPosition();
     }
 }
@@ -776,6 +844,21 @@ window.fetchFullArtistProfile = async (artist) => {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
+    
+    if (window.OCTAVE.currentIndex >= 0 && window.OCTAVE.queue.length > 0) {
+        const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
+        updatePlayerUI(track);
+        
+        if (window.AUDIO_ENGINE === 'native') {
+            streamQueue = buildStreamQueue(track.videoId);
+            streamQueueIdx = 0;
+            if (streamQueue.length > 0) {
+                AUDIO.src = streamQueue[0];
+                AUDIO.load();
+            }
+        }
+    }
+
     document.querySelector('.mini-player')?.addEventListener('click', (e) => {
         const rect = document.querySelector('.mini-player').getBoundingClientRect();
         if (e.clientY - rect.top <= 10) {
