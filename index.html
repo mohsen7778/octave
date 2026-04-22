@@ -3,31 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Octave | Premium Audio</title>
+    <title>Octave | Obsidian Studio</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <!-- Syne + DM Sans + JetBrains Mono (Premium type stack) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 </head>
 <body>
 
+    <!-- Splash Screen -->
     <div id="splash-screen" class="splash-screen">
-        <img src="logo.png" alt="Octave Logo" class="splash-logo" onerror="this.style.display='none'">
+        <img src="logo.png" alt="Octave" class="splash-logo" onerror="this.style.display='none'">
+        <div class="splash-wordmark">Octave</div>
         <p class="splash-text">"Free music subscription was promised to you 3000 years ago..."</p>
     </div>
 
+    <!-- Ambient Background -->
+    <div class="ambient-bg" aria-hidden="true"></div>
+
     <div class="mobile-app">
-        
+
+        <!-- ── MAIN CONTENT ─────────────────────────────────── -->
         <main class="main-content scroll-y" id="dynamic-view">
+
             <header class="app-header">
                 <div class="greeting">
-                    <div style="display: flex; align-items: center; gap: 12px;">
-                        <img src="logo.png" alt="Logo" style="width: 44px; height: 44px; border-radius: 12px; object-fit: cover; box-shadow: var(--shadow-soft);" onerror="this.style.display='none'">
-                        <h1 id="time-greeting" style="margin: 0; line-height: 44px; font-size: 24px;">Good evening</h1>
+                    <div class="greeting-left">
+                        <img src="logo.png" alt="Octave" class="greeting-logo" onerror="this.style.display='none'">
+                        <h1 id="time-greeting">Good evening</h1>
                     </div>
                     <div class="header-actions">
-                        <button class="icon-btn" id="menu-btn"><i class="fa-solid fa-bars"></i></button>
+                        <button class="icon-btn" id="menu-btn" aria-label="Settings">
+                            <i class="fa-solid fa-sliders"></i>
+                        </button>
                     </div>
                 </div>
                 <div class="filter-chips scroll-x">
@@ -37,39 +47,70 @@
                 </div>
             </header>
 
+            <!-- Recently Played -->
             <section class="content-section">
-                <h2 class="section-title">Recently Played</h2>
+                <div class="section-header">
+                    <span class="section-label">Continue Listening</span>
+                    <h2 class="section-title">Recently Played</h2>
+                </div>
                 <div class="horizontal-scroll scroll-x" id="home-recent-grid">
-                    <div style="color: var(--text-secondary); font-size: 13px; padding-bottom: 20px;">Play some tracks to build your history...</div>
+                    <div style="color:var(--text-secondary);font-size:13px;padding-bottom:20px;">
+                        Play some tracks to build your history...
+                    </div>
                 </div>
             </section>
 
+            <!-- Trending -->
             <section class="content-section" id="trending-section">
-                <h2 class="section-title">Global Top 50 Trending <i class="fa-solid fa-fire" style="color: #ff5000; font-size: 16px; margin-left: 4px;"></i></h2>
+                <div class="section-header">
+                    <span class="section-label">Global Charts</span>
+                    <h2 class="section-title">
+                        Top 50 Trending
+                        <i class="fa-solid fa-fire"></i>
+                    </h2>
+                </div>
                 <div class="horizontal-scroll scroll-x" id="home-trending-grid">
-                    <div style="color: var(--text-secondary); font-size: 13px; padding-bottom: 20px;"><i class="fa-solid fa-spinner fa-spin"></i> Loading charts...</div>
+                    <div style="color:var(--text-secondary);font-size:13px;padding-bottom:20px;">
+                        <i class="fa-solid fa-spinner fa-spin"></i>&nbsp; Loading charts...
+                    </div>
                 </div>
             </section>
 
+            <!-- Recommendations -->
             <section class="content-section" id="recommended-section">
-                <h2 class="section-title">Recommended For You</h2>
+                <div class="section-header">
+                    <span class="section-label">Taste Profile</span>
+                    <h2 class="section-title">Recommended For You</h2>
+                </div>
                 <div class="horizontal-scroll scroll-x" id="home-recs-grid">
-                    <div style="color: var(--text-secondary); font-size: 13px; padding-bottom: 20px;"><i class="fa-solid fa-spinner fa-spin"></i> Finding your vibe...</div>
+                    <div style="color:var(--text-secondary);font-size:13px;padding-bottom:20px;">
+                        <i class="fa-solid fa-spinner fa-spin"></i>&nbsp; Finding your vibe...
+                    </div>
                 </div>
             </section>
 
+            <!-- Playlists -->
             <section class="content-section">
-                <div style="display: flex; justify-content: space-between; align-items: center; padding-right: 20px; margin-bottom: 16px;">
-                    <h2 class="section-title" style="margin-bottom: 0;">Your Heavy Duty Mixes</h2>
-                    <button class="icon-btn" id="open-create-playlist"><i class="fa-solid fa-plus"></i></button>
+                <div class="section-header" style="display:flex;justify-content:space-between;align-items:flex-end;padding-right:22px;">
+                    <div>
+                        <span class="section-label">Your Library</span>
+                        <h2 class="section-title">Mixes & Playlists</h2>
+                    </div>
+                    <button class="icon-btn" id="open-create-playlist" aria-label="Create playlist"
+                        style="background:var(--accent-dim);border:1px solid var(--accent-soft);color:var(--accent);border-radius:10px;width:34px;height:34px;font-size:15px;">
+                        <i class="fa-solid fa-plus"></i>
+                    </button>
                 </div>
                 <div class="vertical-list" id="home-playlists"></div>
             </section>
+
             <div class="bottom-spacer"></div>
         </main>
 
+
+        <!-- ── MINI PLAYER ──────────────────────────────────── -->
         <div class="mini-player glass-panel">
-            <div class="progress-bar-mini" id="mini-progress" style="width: 0%;"></div>
+            <div class="progress-bar-mini" id="mini-progress" style="width:0%;"></div>
             <div class="mini-inner">
                 <div class="mini-art" id="mini-art-el"></div>
                 <div class="mini-info">
@@ -77,153 +118,253 @@
                     <div class="mini-artist" id="mini-artist-el">Select a track</div>
                 </div>
                 <div class="mini-controls">
-                    <button class="icon-btn" id="mini-like-btn"><i class="fa-regular fa-heart"></i></button>
-                    <button class="icon-btn play-btn-mini"><i class="fa-solid fa-play"></i></button>
+                    <button class="icon-btn" id="mini-like-btn" aria-label="Like">
+                        <i class="fa-regular fa-heart"></i>
+                    </button>
+                    <button class="icon-btn play-btn-mini" aria-label="Play / Pause">
+                        <i class="fa-solid fa-play"></i>
+                    </button>
                 </div>
             </div>
         </div>
 
+
+        <!-- ── FULL PLAYER ──────────────────────────────────── -->
         <div id="full-player" class="full-player-overlay">
+
             <div class="fp-header">
-                <button class="icon-btn" id="close-fp"><i class="fa-solid fa-chevron-down"></i></button>
+                <button class="icon-btn" id="close-fp" aria-label="Minimise">
+                    <i class="fa-solid fa-chevron-down"></i>
+                </button>
                 <span class="fp-header-title">Now Playing</span>
-                <button class="icon-btn" id="fp-options"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+                <button class="icon-btn" id="fp-options" aria-label="Options">
+                    <i class="fa-solid fa-ellipsis-vertical"></i>
+                </button>
             </div>
-            
+
+            <!-- Album Art -->
             <div class="fp-art-container">
                 <img id="fp-art" src="" alt="Album Art">
             </div>
-            
+
+            <!-- Track Info -->
             <div class="fp-info-row">
                 <div class="fp-meta">
                     <h2 id="fp-title">Nothing Playing</h2>
-                    <p id="fp-artist" style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); text-decoration: underline dashed;">Select a track</p>
+                    <p id="fp-artist" style="cursor:pointer;display:inline-flex;align-items:center;gap:5px;">
+                        Select a track
+                    </p>
                 </div>
-                <button class="icon-btn" id="fp-like"><i class="fa-regular fa-heart"></i></button>
+                <button class="icon-btn" id="fp-like" aria-label="Like track">
+                    <i class="fa-regular fa-heart"></i>
+                </button>
             </div>
 
+            <!-- Quick Actions -->
             <div class="fp-actions-grid">
-                <button class="icon-btn" id="fp-lyrics-btn"><i class="fa-solid fa-align-left"></i> Lyrics</button>
-                <button class="icon-btn" id="fp-queue-btn"><i class="fa-solid fa-list-ol"></i> Up Next</button>
+                <button class="icon-btn" id="fp-lyrics-btn">
+                    <i class="fa-solid fa-align-left"></i> Lyrics
+                </button>
+                <button class="icon-btn" id="fp-queue-btn">
+                    <i class="fa-solid fa-list-ol"></i> Up Next
+                </button>
             </div>
 
+            <!-- Progress -->
             <div class="fp-progress-section">
                 <div class="fp-progress-bar" id="fp-progress-container">
-                    <div class="fp-progress-fill" id="fp-progress-fill" style="width: 0%;"></div>
+                    <div class="fp-progress-fill" id="fp-progress-fill" style="width:0%;"></div>
                 </div>
                 <div class="fp-time-row">
                     <span id="fp-time-current">0:00</span>
                     <span id="fp-time-total">0:00</span>
                 </div>
             </div>
-            
+
+            <!-- Controls -->
             <div class="fp-controls">
-                <button class="icon-btn sm" id="fp-prev"><i class="fa-solid fa-backward-step"></i></button>
-                <button class="play-btn-huge" id="fp-play"><i class="fa-solid fa-play"></i></button>
-                <button class="icon-btn sm" id="fp-next"><i class="fa-solid fa-forward-step"></i></button>
+                <button class="icon-btn sm" id="fp-prev" aria-label="Previous">
+                    <i class="fa-solid fa-backward-step"></i>
+                </button>
+                <button class="play-btn-huge" id="fp-play" aria-label="Play / Pause">
+                    <i class="fa-solid fa-play"></i>
+                </button>
+                <button class="icon-btn sm" id="fp-next" aria-label="Next">
+                    <i class="fa-solid fa-forward-step"></i>
+                </button>
             </div>
 
+            <!-- Lyrics / Queue Panel -->
             <div id="fp-overlay-panel" class="full-overlay-panel">
                 <div class="panel-header">
-                    <h2 id="fp-overlay-title">Title</h2>
-                    <button class="icon-btn" id="close-fp-overlay"><i class="fa-solid fa-xmark"></i></button>
+                    <h2 id="fp-overlay-title">Lyrics</h2>
+                    <button class="icon-btn" id="close-fp-overlay" aria-label="Close">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
                 </div>
-                <div id="fp-overlay-content" class="scroll-y" style="flex: 1; padding-bottom: 20px;"></div>
+                <div id="fp-overlay-content" class="scroll-y" style="flex:1;padding-bottom:20px;"></div>
             </div>
         </div>
 
+
+        <!-- ── BOTTOM NAVIGATION ────────────────────────────── -->
         <nav class="bottom-nav glass-panel">
-            <div class="nav-item active" data-tab="home"><i class="fa-solid fa-house"></i><span>Home</span></div>
-            <div class="nav-item" data-tab="search"><i class="fa-solid fa-magnifying-glass"></i><span>Search</span></div>
-            <div class="nav-item" data-tab="library"><i class="fa-solid fa-layer-group"></i><span>Library</span></div>
-            <div class="nav-item" data-tab="premium"><i class="fa-solid fa-crown"></i><span>Premium</span></div>
+            <div class="nav-item active" data-tab="home">
+                <i class="fa-solid fa-house"></i>
+                <span>Home</span>
+            </div>
+            <div class="nav-item" data-tab="search">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <span>Search</span>
+            </div>
+            <div class="nav-item" data-tab="library">
+                <i class="fa-solid fa-layer-group"></i>
+                <span>Library</span>
+            </div>
+            <div class="nav-item" data-tab="premium">
+                <i class="fa-solid fa-crown"></i>
+                <span>Premium</span>
+            </div>
         </nav>
 
+
+        <!-- ── SIDE DRAWER ──────────────────────────────────── -->
         <div class="drawer-backdrop" id="menu-backdrop"></div>
         <div class="side-drawer" id="side-menu">
             <div class="drawer-header">
                 <h2>Settings</h2>
-                <button class="icon-btn" id="close-menu"><i class="fa-solid fa-xmark"></i></button>
+                <button class="icon-btn" id="close-menu" aria-label="Close">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
             </div>
             <div class="drawer-links">
-                <div class="drawer-item" id="export-vault-btn"><i class="fa-solid fa-download"></i> Backup Vault</div>
-                <div class="drawer-item" id="import-vault-btn"><i class="fa-solid fa-upload"></i> Restore Vault</div>
+                <div class="drawer-item" id="export-vault-btn">
+                    <i class="fa-solid fa-arrow-down-to-line"></i> Backup Vault
+                </div>
+                <div class="drawer-item" id="import-vault-btn">
+                    <i class="fa-solid fa-arrow-up-from-line"></i> Restore Vault
+                </div>
                 <input type="file" id="import-vault-input" style="display:none" accept=".json">
-                <div style="height: 1px; background: var(--glass-border); margin: 10px 0;"></div>
-                <div class="drawer-item" data-page="terms.html"><i class="fa-solid fa-scale-balanced"></i> Terms & Conditions</div>
-                <div class="drawer-item" data-page="contact.html"><i class="fa-brands fa-instagram"></i> Contact Support</div>
+                <div class="divider"></div>
+                <div class="drawer-item" data-page="terms.html">
+                    <i class="fa-solid fa-scale-balanced"></i> Terms & Conditions
+                </div>
+                <div class="drawer-item" data-page="contact.html">
+                    <i class="fa-brands fa-telegram"></i> Contact Support
+                </div>
             </div>
         </div>
 
+
+        <!-- ══════════════════════════════════════════════════ -->
+        <!-- MODALS (sheet style)                               -->
+        <!-- ══════════════════════════════════════════════════ -->
+
+        <!-- Brave Prompt -->
         <div class="modal-overlay" id="brave-modal">
             <div class="modal-content glass-panel shadow-heavy">
-                <div style="font-size: 40px; color: #ff5000; margin-bottom: 16px; text-align: center;"><i class="fa-brands fa-brave"></i></div>
-                <h3 style="text-align: center; margin-bottom: 12px;">Use Brave Browser</h3>
-                <p style="color: var(--text-secondary); font-size: 14px; text-align: center; margin-bottom: 24px; line-height: 1.5;">For the ultimate heavy-duty experience with unkillable background play and zero ads, we strictly recommend launching Octave in Brave Browser.</p>
+                <div style="text-align:center;margin-bottom:20px;">
+                    <div style="width:64px;height:64px;background:rgba(255,80,0,0.12);border:1px solid rgba(255,80,0,0.2);border-radius:18px;display:inline-flex;align-items:center;justify-content:center;margin-bottom:14px;">
+                        <i class="fa-brands fa-brave" style="font-size:32px;color:#FF5000;"></i>
+                    </div>
+                    <h3 style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;margin-bottom:8px;">Try Brave Browser</h3>
+                    <p style="color:var(--text-secondary);font-size:13.5px;line-height:1.6;">
+                        Get unkillable background playback, zero ads, and instant loading. The premium Octave experience lives in Brave.
+                    </p>
+                </div>
                 <div class="modal-actions">
-                    <button class="btn-secondary" id="close-brave">Maybe Later</button>
-                    <a href="https://play.google.com/store/apps/details?id=com.brave.browser" target="_blank" class="btn-primary" id="get-brave" style="color: var(--bg-deep); text-decoration: none;">Get Brave</a>
+                    <button class="btn-secondary" id="close-brave">Not Now</button>
+                    <a href="https://play.google.com/store/apps/details?id=com.brave.browser" target="_blank" class="btn-primary" id="get-brave" style="text-decoration:none;">
+                        <i class="fa-brands fa-brave" style="font-size:15px;"></i> Get Brave
+                    </a>
                 </div>
             </div>
         </div>
 
+        <!-- Sleep Timer -->
         <div class="modal-overlay" id="timer-modal">
-            <div class="modal-content glass-panel shadow-heavy" style="text-align: center;">
-                <h3 style="margin-bottom: 16px;">Sleep Timer</h3>
-                <div class="vertical-list">
-                    <div class="drawer-item" style="justify-content: center;" onclick="window.setSleepTimer(15)">15 Minutes</div>
-                    <div class="drawer-item" style="justify-content: center;" onclick="window.setSleepTimer(30)">30 Minutes</div>
-                    <div class="drawer-item" style="justify-content: center;" onclick="window.setSleepTimer(60)">60 Minutes</div>
-                    <div class="drawer-item" style="justify-content: center; color: #ff4444;" onclick="window.setSleepTimer(0)">Turn Off Timer</div>
+            <div class="modal-content glass-panel shadow-heavy">
+                <h3 style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:16px;">Sleep Timer</h3>
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                    <div class="drawer-item" style="justify-content:space-between;" onclick="window.setSleepTimer(15)">
+                        <span>15 Minutes</span>
+                        <i class="fa-regular fa-clock" style="color:var(--text-secondary);"></i>
+                    </div>
+                    <div class="drawer-item" style="justify-content:space-between;" onclick="window.setSleepTimer(30)">
+                        <span>30 Minutes</span>
+                        <i class="fa-regular fa-clock" style="color:var(--text-secondary);"></i>
+                    </div>
+                    <div class="drawer-item" style="justify-content:space-between;" onclick="window.setSleepTimer(60)">
+                        <span>60 Minutes</span>
+                        <i class="fa-regular fa-clock" style="color:var(--text-secondary);"></i>
+                    </div>
+                    <div class="drawer-item" style="justify-content:space-between;color:#FF5252;" onclick="window.setSleepTimer(0)">
+                        <span>Turn Off Timer</span>
+                        <i class="fa-solid fa-xmark"></i>
+                    </div>
                 </div>
-                <button class="btn-secondary" style="margin-top: 16px; width: 100%;" id="close-timer">Cancel</button>
+                <button class="btn-secondary" style="margin-top:14px;width:100%;" id="close-timer">Cancel</button>
             </div>
         </div>
 
+        <!-- Create Playlist -->
         <div class="modal-overlay" id="playlist-modal">
             <div class="modal-content glass-panel shadow-heavy">
-                <h3 style="margin-bottom: 16px;">Create Playlist</h3>
-                <input type="text" id="playlist-name" class="modern-input" placeholder="Playlist Name (e.g. Gym Heavy)" autocomplete="off">
-                <div class="modal-actions" style="margin-top: 24px;">
+                <h3 style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:16px;">Create Playlist</h3>
+                <input type="text" id="playlist-name" class="modern-input" placeholder="e.g. Late Night Drive" autocomplete="off">
+                <div class="modal-actions" style="margin-top:20px;">
                     <button class="btn-secondary" id="close-playlist">Cancel</button>
-                    <button class="btn-primary" id="save-playlist" style="color: var(--bg-deep);">Create</button>
+                    <button class="btn-primary" id="save-playlist">Create</button>
                 </div>
             </div>
         </div>
 
+        <!-- Track Options -->
         <div class="modal-overlay" id="track-options-modal">
             <div class="modal-content glass-panel shadow-heavy">
-                <div id="opt-track-info" style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px; border-bottom: 1px solid var(--glass-border); padding-bottom: 16px;"></div>
-                <div class="vertical-list">
-                    <div class="drawer-item" id="opt-like-track"><i class="fa-regular fa-heart"></i> <span>Like Track</span></div>
-                    <div class="drawer-item" id="opt-add-playlist"><i class="fa-solid fa-list"></i> <span>Add to Playlist</span></div>
-                    <div class="drawer-item" id="opt-sleep-timer"><i class="fa-solid fa-clock"></i> <span>Sleep Timer</span></div>
+                <div id="opt-track-info" style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border);"></div>
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                    <div class="drawer-item" id="opt-like-track">
+                        <i class="fa-regular fa-heart"></i> <span>Like Track</span>
+                    </div>
+                    <div class="drawer-item" id="opt-add-playlist">
+                        <i class="fa-solid fa-list"></i> <span>Add to Playlist</span>
+                    </div>
+                    <div class="drawer-item" id="opt-sleep-timer">
+                        <i class="fa-solid fa-clock"></i> <span>Sleep Timer</span>
+                    </div>
                 </div>
-                <button class="btn-secondary" style="margin-top: 16px; width: 100%;" id="close-track-options">Cancel</button>
+                <button class="btn-secondary" style="margin-top:16px;width:100%;" id="close-track-options">Cancel</button>
             </div>
         </div>
 
+        <!-- Select Playlist -->
         <div class="modal-overlay" id="select-playlist-modal">
             <div class="modal-content glass-panel shadow-heavy">
-                <h3 style="margin-bottom: 16px;">Select Playlist</h3>
-                <div class="vertical-list scroll-y" id="playlist-selection-list" style="max-height: 250px; margin-bottom: 16px;"></div>
-                <button class="btn-secondary" style="width: 100%;" id="close-select-playlist">Cancel</button>
+                <h3 style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:16px;">Add to Playlist</h3>
+                <div class="vertical-list scroll-y" id="playlist-selection-list" style="max-height:240px;margin-bottom:16px;padding-right:0;"></div>
+                <button class="btn-secondary" style="width:100%;" id="close-select-playlist">Cancel</button>
             </div>
         </div>
 
+        <!-- YouTube Import -->
         <div class="modal-overlay" id="yt-import-modal">
             <div class="modal-content glass-panel shadow-heavy">
-                <h3 style="margin-bottom: 16px;">Import YouTube Playlist</h3>
-                <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px;">Paste a public YouTube playlist URL. The algorithm will rip the tracks directly to your vault.</p>
+                <h3 style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:8px;">Import YouTube Playlist</h3>
+                <p style="color:var(--text-secondary);font-size:13px;margin-bottom:16px;line-height:1.6;">
+                    Paste a public YouTube playlist URL and Octave will rip the tracks directly to your vault.
+                </p>
                 <input type="text" id="yt-playlist-url" class="modern-input" placeholder="https://youtube.com/playlist?list=..." autocomplete="off">
-                <div class="modal-actions" style="margin-top: 24px;">
+                <div class="modal-actions" style="margin-top:20px;">
                     <button class="btn-secondary" id="close-yt-import">Cancel</button>
-                    <button class="btn-primary" id="start-yt-import" style="color: var(--bg-deep);"><i class="fa-brands fa-youtube" style="margin-right: 6px;"></i> Import</button>
+                    <button class="btn-primary" id="start-yt-import">
+                        <i class="fa-brands fa-youtube" style="font-size:15px;"></i> Import
+                    </button>
                 </div>
             </div>
         </div>
 
-    </div>
+    </div><!-- /.mobile-app -->
 
     <script src="js/algorithm.js"></script>
     <script src="js/player.js"></script>
