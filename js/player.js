@@ -1,3 +1,13 @@
+// ─── PAGE VISIBILITY OVERRIDE ────────────────────────────────────────────────
+// YouTube iframe reads document.hidden from OUR document (not its own).
+// We define the rule once: this tab is always visible. Always.
+// YouTube never sees a hidden state, so it never auto-pauses.
+Object.defineProperty(document, 'hidden', { get: () => false, configurable: true });
+Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true });
+// Block visibilitychange from ever reaching the iframe
+document.addEventListener('visibilitychange', e => e.stopImmediatePropagation(), true);
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ============================================================
 // player.js — Octave IFrame Audio Engine
 // Restored pure client-side YouTube IFrame for instant loading.
