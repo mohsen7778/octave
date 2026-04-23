@@ -86,7 +86,8 @@ function loadCache() {
         });
 
         window.OCTAVE.queue = parsed.queue || [];
-        window.OCTAVE.currentIndex = parsed.currentIndex || -1;
+        // FIX: 0 evaluates to false, causing the first track in queue to be lost on refresh. Checking undefined directly.
+        window.OCTAVE.currentIndex = parsed.currentIndex !== undefined ? parsed.currentIndex : -1;
         window.OCTAVE.dailyRecs = parsed.dailyRecs || { timestamp: 0, tracks: [] };
         window.OCTAVE.trendingData = parsed.trendingData || { timestamp: 0, tracks: [] };
         window.OCTAVE.artistCache = parsed.artistCache || {};
@@ -845,9 +846,18 @@ window.fetchFullArtistProfile = async (artist) => {
 
 document.addEventListener('DOMContentLoaded', () => {
     
+    // --- NEW FALLBACK LOGIC ---
+    // If queue somehow gets wiped, load the absolute most recently played song to keep the player active
+    if (window.OCTAVE.currentIndex === -1 && window.OCTAVE.recentPlayed.length > 0) {
+        window.OCTAVE.queue = [window.OCTAVE.recentPlayed[0]];
+        window.OCTAVE.currentIndex = 0;
+        window.saveCache();
+    }
+
     if (window.OCTAVE.currentIndex >= 0 && window.OCTAVE.queue.length > 0) {
         const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
         updatePlayerUI(track);
+        updateMediaSession(track); // Let OS Background controls know what song is locked in on refresh
         
         if (window.AUDIO_ENGINE === 'native') {
             streamQueue = buildStreamQueue(track.videoId);
