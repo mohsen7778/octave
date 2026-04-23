@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     
     // --- SHARED TRACK BOOT SEQUENCE ---
-    // Reads URL for shared song, auto-loads it, then scrubs the URL clean
+    // Reads URL for shared song, auto-loads it, opens full player, then scrubs the URL clean
     const params = new URLSearchParams(window.location.search);
     const shareV = params.get('v');
     if (shareV) {
@@ -17,9 +17,12 @@ document.addEventListener('DOMContentLoaded', () => {
         // Clean URL so refreshing doesn't replay it
         window.history.replaceState({}, document.title, window.location.pathname);
         
-        // Let the player engines load, then auto-play the shared track
+        // Let the player engines load, auto-play the shared track, and force full screen
         setTimeout(() => {
-            if(window.playTrackByIndex) window.playTrackByIndex(0);
+            if(window.playTrackByIndex) {
+                window.playTrackByIndex(0);
+                document.getElementById('full-player').classList.add('active');
+            }
         }, 1000);
     }
 
@@ -214,6 +217,24 @@ document.getElementById('fp-lyrics-btn').addEventListener('click', async () => {
     fontHeader += `</div>`;
 
     fpContent.innerHTML = fontHeader + `<div id="lyrics-content">${html}</div>`;
+});
+
+// NEW LISTENER: Share button direct from the full player
+document.getElementById('fp-share-btn')?.addEventListener('click', () => {
+    if (window.OCTAVE.currentIndex >= 0) {
+        const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
+        const url = new URL(window.location.origin + window.location.pathname);
+        url.searchParams.set('v', track.videoId);
+        url.searchParams.set('t', track.title);
+        url.searchParams.set('a', track.author);
+        url.searchParams.set('th', track.thumb);
+        
+        navigator.clipboard.writeText(url.toString()).then(() => {
+            alert("Track link copied to clipboard!");
+        }).catch(() => {
+            alert("Failed to copy link.");
+        });
+    }
 });
 
 window.setLyricsFont = (fontCss, el) => {
