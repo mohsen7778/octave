@@ -1,4 +1,28 @@
 document.addEventListener('DOMContentLoaded', () => {
+    
+    // --- SHARED TRACK BOOT SEQUENCE ---
+    // Reads URL for shared song, auto-loads it, then scrubs the URL clean
+    const params = new URLSearchParams(window.location.search);
+    const shareV = params.get('v');
+    if (shareV) {
+        const shareT = params.get('t') || 'Shared Track';
+        const shareA = params.get('a') || 'Unknown Artist';
+        const shareTh = params.get('th') || '';
+        
+        const sharedTrack = { videoId: shareV, title: shareT, author: shareA, thumb: shareTh };
+        window.OCTAVE.queue = [sharedTrack];
+        window.OCTAVE.currentIndex = 0;
+        window.saveCache();
+        
+        // Clean URL so refreshing doesn't replay it
+        window.history.replaceState({}, document.title, window.location.pathname);
+        
+        // Let the player engines load, then auto-play the shared track
+        setTimeout(() => {
+            if(window.playTrackByIndex) window.playTrackByIndex(0);
+        }, 1000);
+    }
+
     setTimeout(() => {
         const splash = document.getElementById('splash-screen');
         if (splash) {
@@ -90,6 +114,21 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 });
+
+window.openTrackOptions = (track) => {
+    window.OCTAVE.activeTrackForOptions = track;
+    const infoDiv = document.getElementById('opt-track-info');
+    if (infoDiv) {
+        infoDiv.innerHTML = `
+            <img src="${track.thumb}" style="width: 40px; height: 40px; border-radius: 6px; object-fit: cover;">
+            <div style="flex: 1; min-width: 0;">
+                <div style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${window.escapeHTML(track.title)}</div>
+                <div style="font-size: 12px; color: var(--text-secondary);">${window.escapeHTML(track.author)}</div>
+            </div>
+        `;
+    }
+    document.getElementById('track-options-modal').classList.add('active');
+};
 
 document.body.addEventListener('click', async (e) => {
     if (e.target.closest('#menu-btn')) {
@@ -281,12 +320,11 @@ document.getElementById('close-timer').addEventListener('click', () => document.
 if (document.getElementById('fp-options')) {
     document.getElementById('fp-options').addEventListener('click', () => {
         if (window.OCTAVE && window.OCTAVE.currentIndex >= 0) {
-            openTrackOptions(window.OCTAVE.queue[window.OCTAVE.currentIndex]);
+            window.openTrackOptions(window.OCTAVE.queue[window.OCTAVE.currentIndex]);
         }
     });
 }
 
-// NEW FUNCTION: Renders individual playlist pages
 window.renderPlaylistDetail = (plName) => {
     const dynamicView = document.getElementById('dynamic-view');
     const tracks = window.OCTAVE.playlists[plName] || [];
@@ -323,7 +361,6 @@ window.renderPlaylistDetail = (plName) => {
     dynamicView.innerHTML = html;
 };
 
-// NEW FUNCTION: Renders liked songs page
 window.renderLikedSongs = () => {
     const dynamicView = document.getElementById('dynamic-view');
     const tracks = Object.values(window.OCTAVE.liked);
@@ -424,7 +461,6 @@ window.renderHome = () => {
         if (window.generateDiscoverMix) window.generateDiscoverMix();
     });
     
-    // Bind liked songs button
     document.getElementById('open-liked-songs').addEventListener('click', window.renderLikedSongs);
 
     Object.keys(window.OCTAVE.playlists).forEach(plName => {
@@ -442,7 +478,6 @@ window.renderHome = () => {
             <button class="icon-btn"><i class="fa-solid fa-chevron-right"></i></button>
         `;
         
-        // Bind playlist detail buttons
         el.addEventListener('click', () => window.renderPlaylistDetail(plName));
         playlistsDiv.appendChild(el);
     });
@@ -467,7 +502,6 @@ function renderLibrary() {
             <i class="fa-solid fa-chevron-right" style="color: var(--text-secondary);"></i>
         `;
         
-        // Bind playlist detail buttons in library tab
         el.addEventListener('click', () => window.renderPlaylistDetail(plName));
         lib.appendChild(el);
     });
@@ -563,6 +597,24 @@ function bindHomeModals() {
         }
     });
 }
+
+document.getElementById('opt-share-track').addEventListener('click', () => {
+    if (window.OCTAVE.activeTrackForOptions) {
+        const track = window.OCTAVE.activeTrackForOptions;
+        const url = new URL(window.location.origin + window.location.pathname);
+        url.searchParams.set('v', track.videoId);
+        url.searchParams.set('t', track.title);
+        url.searchParams.set('a', track.author);
+        url.searchParams.set('th', track.thumb);
+        
+        navigator.clipboard.writeText(url.toString()).then(() => {
+            alert("Track link copied to clipboard!");
+        }).catch(() => {
+            alert("Failed to copy link.");
+        });
+        document.getElementById('track-options-modal').classList.remove('active');
+    }
+});
 
 document.getElementById('opt-like-track').addEventListener('click', () => {
     if (window.OCTAVE.activeTrackForOptions) {
