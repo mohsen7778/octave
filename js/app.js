@@ -80,10 +80,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('close-track-options').addEventListener('click', () => document.getElementById('track-options-modal').classList.remove('active'));
     document.getElementById('close-select-playlist').addEventListener('click', () => document.getElementById('select-playlist-modal').classList.remove('active'));
     
-    // Fix for the cancel button
     document.getElementById('close-yt-import').addEventListener('click', () => document.getElementById('yt-import-modal').classList.remove('active'));
 
-    // Fix for auto-canceling when clicking outside the modal
     document.querySelectorAll('.modal-overlay').forEach(modal => {
         modal.addEventListener('click', (e) => {
             if (e.target === modal) {
@@ -147,7 +145,6 @@ const fpContent = document.getElementById('fp-overlay-content');
 const fpTitle = document.getElementById('fp-overlay-title');
 document.getElementById('close-fp-overlay').addEventListener('click', () => fpPanel.classList.remove('active'));
 
-// STATIC LYRICS WITH FONT PICKER
 document.getElementById('fp-lyrics-btn').addEventListener('click', async () => {
     if (window.OCTAVE.currentIndex < 0) return;
     fpTitle.innerText = 'Lyrics';
@@ -289,6 +286,78 @@ if (document.getElementById('fp-options')) {
     });
 }
 
+// NEW FUNCTION: Renders individual playlist pages
+window.renderPlaylistDetail = (plName) => {
+    const dynamicView = document.getElementById('dynamic-view');
+    const tracks = window.OCTAVE.playlists[plName] || [];
+    let html = `
+        <div style="padding: 20px;">
+            <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 24px; margin-top: 10px;">
+                <button class="icon-btn" onclick="document.querySelector('.nav-item.active').click()"><i class="fa-solid fa-arrow-left"></i></button>
+                <h1 style="font-size: 24px; font-weight: 700; margin: 0;">${window.escapeHTML(plName)}</h1>
+            </div>
+            <div style="display: flex; gap: 12px; margin-bottom: 24px;">
+                <button class="btn-primary" style="flex: 1;" onclick="window.playPlaylist('${window.escapeHTML(plName)}')"><i class="fa-solid fa-play"></i> Play</button>
+                <button class="btn-secondary" style="flex: 1;" onclick="if(window.smartShufflePlaylist) window.smartShufflePlaylist('${window.escapeHTML(plName)}')"><i class="fa-solid fa-shuffle"></i> Shuffle</button>
+                <button class="icon-btn" style="color: #ff4444; width: 44px; background: var(--bg-surface); border-radius: 12px;" onclick="window.deletePlaylist('${window.escapeHTML(plName)}')"><i class="fa-solid fa-trash"></i></button>
+            </div>
+            <div class="vertical-list">
+    `;
+    if (tracks.length === 0) {
+        html += `<div class="empty-state-text">Playlist is empty.</div>`;
+    } else {
+        tracks.forEach((track, idx) => {
+            html += `
+                <div class="list-item" style="position: relative;">
+                    <img src="${track.thumb}" style="width: 48px; height: 48px; border-radius: 6px; object-fit: cover;" onclick="window.OCTAVE.queue = [...window.OCTAVE.playlists['${window.escapeHTML(plName)}']]; window.playTrackByIndex(${idx});">
+                    <div class="list-info" style="cursor: pointer;" onclick="window.OCTAVE.queue = [...window.OCTAVE.playlists['${window.escapeHTML(plName)}']]; window.playTrackByIndex(${idx});">
+                        <div class="list-title">${window.escapeHTML(track.title)}</div>
+                        <div class="list-subtitle">${window.escapeHTML(track.author)}</div>
+                    </div>
+                    <button class="icon-btn" style="color: var(--text-secondary); position: absolute; right: 0; padding: 10px;" onclick="window.removeFromPlaylist('${window.escapeHTML(plName)}', ${idx})"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+            `;
+        });
+    }
+    html += `</div></div><div class="bottom-spacer"></div>`;
+    dynamicView.innerHTML = html;
+};
+
+// NEW FUNCTION: Renders liked songs page
+window.renderLikedSongs = () => {
+    const dynamicView = document.getElementById('dynamic-view');
+    const tracks = Object.values(window.OCTAVE.liked);
+    let html = `
+        <div style="padding: 20px;">
+            <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 24px; margin-top: 10px;">
+                <button class="icon-btn" onclick="document.querySelector('.nav-item.active').click()"><i class="fa-solid fa-arrow-left"></i></button>
+                <h1 style="font-size: 24px; font-weight: 700; margin: 0;">Liked Songs</h1>
+            </div>
+            <div style="display: flex; gap: 12px; margin-bottom: 24px;">
+                <button class="btn-primary" style="flex: 1;" onclick="window.OCTAVE.queue = Object.values(window.OCTAVE.liked); window.playTrackByIndex(0);"><i class="fa-solid fa-play"></i> Play</button>
+            </div>
+            <div class="vertical-list">
+    `;
+    if (tracks.length === 0) {
+        html += `<div class="empty-state-text">No liked songs yet.</div>`;
+    } else {
+        tracks.forEach((track, idx) => {
+            html += `
+                <div class="list-item" style="position: relative;">
+                    <img src="${track.thumb}" style="width: 48px; height: 48px; border-radius: 6px; object-fit: cover;" onclick="window.OCTAVE.queue = Object.values(window.OCTAVE.liked); window.playTrackByIndex(${idx});">
+                    <div class="list-info" style="cursor: pointer;" onclick="window.OCTAVE.queue = Object.values(window.OCTAVE.liked); window.playTrackByIndex(${idx});">
+                        <div class="list-title">${window.escapeHTML(track.title)}</div>
+                        <div class="list-subtitle">${window.escapeHTML(track.author)}</div>
+                    </div>
+                    <button class="icon-btn" style="color: var(--accent); position: absolute; right: 0; padding: 10px;" onclick="window.removeFromLiked('${track.videoId}')"><i class="fa-solid fa-heart"></i></button>
+                </div>
+            `;
+        });
+    }
+    html += `</div></div><div class="bottom-spacer"></div>`;
+    dynamicView.innerHTML = html;
+};
+
 window.renderHome = () => {
     const hour = new Date().getHours();
     let greeting = 'Good evening';
@@ -335,12 +404,12 @@ window.renderHome = () => {
             <div class="list-art shadow-heavy" style="background: linear-gradient(135deg, #8a2387, #e94057, #f27121); display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff;">
                 <i class="fa-solid fa-wand-magic-sparkles"></i>
             </div>
-            <div class="list-info">
+            <div class="list-info" style="cursor: pointer;">
                 <div class="list-title">Auto-DJ Discover Mix</div>
                 <div class="list-subtitle">Endless tracks based on taste</div>
             </div>
         </div>
-        <div class="list-item" id="open-liked-songs">
+        <div class="list-item" id="open-liked-songs" style="cursor: pointer;">
             <div class="list-art shadow-heavy" style="background: linear-gradient(135deg, var(--accent), #0b5c26); display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff;">
                 <i class="fa-solid fa-heart"></i>
             </div>
@@ -354,11 +423,14 @@ window.renderHome = () => {
     document.getElementById('open-discover-mix').addEventListener('click', () => {
         if (window.generateDiscoverMix) window.generateDiscoverMix();
     });
+    
+    // Bind liked songs button
     document.getElementById('open-liked-songs').addEventListener('click', window.renderLikedSongs);
 
     Object.keys(window.OCTAVE.playlists).forEach(plName => {
         const el = document.createElement('div');
         el.className = 'list-item';
+        el.style.cursor = 'pointer';
         el.innerHTML = `
             <div class="list-art shadow-heavy" style="background: #2a2d36; display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--text-secondary);">
                 <i class="fa-solid fa-list"></i>
@@ -369,6 +441,8 @@ window.renderHome = () => {
             </div>
             <button class="icon-btn"><i class="fa-solid fa-chevron-right"></i></button>
         `;
+        
+        // Bind playlist detail buttons
         el.addEventListener('click', () => window.renderPlaylistDetail(plName));
         playlistsDiv.appendChild(el);
     });
@@ -381,6 +455,7 @@ function renderLibrary() {
     Object.keys(window.OCTAVE.playlists).forEach(plName => {
         const el = document.createElement('div');
         el.className = 'list-item';
+        el.style.cursor = 'pointer';
         el.innerHTML = `
             <div class="list-art shadow-heavy" style="background: #2a2d36; display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--text-secondary);">
                 <i class="fa-solid fa-list"></i>
@@ -391,6 +466,8 @@ function renderLibrary() {
             </div>
             <i class="fa-solid fa-chevron-right" style="color: var(--text-secondary);"></i>
         `;
+        
+        // Bind playlist detail buttons in library tab
         el.addEventListener('click', () => window.renderPlaylistDetail(plName));
         lib.appendChild(el);
     });
