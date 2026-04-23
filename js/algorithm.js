@@ -256,7 +256,8 @@ window.generateDiscoverMix = async () => {
 
     const dynamicView = document.getElementById('dynamic-view');
     const originalHTML = dynamicView.innerHTML;
-    dynamicView.innerHTML = '<div style="padding: 100px 20px; text-align:center;"><i class="fa-solid fa-wand-magic-sparkles fa-bounce" style="font-size: 40px; color: var(--accent); margin-bottom: 20px;"></i><h2>Brewing your mix...</h2><p style="color:var(--text-secondary);font-size:14px;margin-top:10px;">Analyzing taste profile via advanced predictive engine.</p></div>';
+    // Added a back button so you can escape the loading screen
+    dynamicView.innerHTML = '<div style="padding: 20px;"><button class="icon-btn" onclick="document.querySelector(\'.nav-item.active\').click()"><i class="fa-solid fa-arrow-left"></i></button></div><div style="padding: 60px 20px; text-align:center;"><i class="fa-solid fa-wand-magic-sparkles fa-bounce" style="font-size: 40px; color: var(--accent); margin-bottom: 20px;"></i><h2>Brewing your mix...</h2><p style="color:var(--text-secondary);font-size:14px;margin-top:10px;">Analyzing taste profile via advanced predictive engine.</p></div>';
 
     // Seed mix with top 3 highest scored tracks
     const topScored = allKnown.sort((a, b) => window.calculateTrackScore(b) - window.calculateTrackScore(a)).slice(0, 5);
