@@ -1,5 +1,5 @@
 // ============================================================
-// app.js — Octave Full Flagship Engine (UNSTRIPPED + AI FIXED)
+// app.js — Octave Full Flagship Engine (UNSTRIPPED + AI TASTE MATCHING)
 // ============================================================
 
 // --- PWA INSTALL LOGIC ---
@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const shareTh = params.get('th') || '';
         
         const sharedTrack = { videoId: shareV, title: shareT, author: shareA, thumb: shareTh };
-        window.OCTAVE.queue = [sharedTrack];
+        window.OCTAVE.queue =[sharedTrack];
         window.OCTAVE.currentIndex = 0;
         window.saveCache();
         
@@ -122,12 +122,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (tab === 'home') {
                 dynamicView.innerHTML = views.home;
                 window.renderHome();
-                bindHomeModals();
             } else {
                 dynamicView.innerHTML = views[tab];
                 if (tab === 'search') {
                     bindSearch();
-                    renderRecentSearches(); // FIXED: Now actually renders search history
+                    renderRecentSearches(); 
                 }
                 if (tab === 'library') renderLibrary();
             }
@@ -135,12 +134,19 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     handleBravePrompt();
-    bindHomeModals();
     window.renderHome();
 
-    // Bind Magic Wand Trigger
-    document.getElementById('open-ai-mix')?.addEventListener('click', () => {
-        document.getElementById('ai-mix-modal').classList.add('active');
+    // --- STATIC MODAL BUTTON BINDINGS (Bound only once!) ---
+    document.getElementById('close-playlist')?.addEventListener('click', () => document.getElementById('playlist-modal').classList.remove('active'));
+    document.getElementById('save-playlist')?.addEventListener('click', () => {
+        const name = document.getElementById('playlist-name').value.trim();
+        if (name !== '' && !window.OCTAVE.playlists[name]) {
+            window.OCTAVE.playlists[name] =[];
+            window.saveCache();
+            document.getElementById('playlist-name').value = '';
+            document.getElementById('playlist-modal').classList.remove('active');
+            window.renderHome();
+        }
     });
 
     document.querySelector('.mini-inner').addEventListener('click', () => document.getElementById('full-player').classList.add('active'));
@@ -160,7 +166,60 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// --- AI MIX ENGINE (FORMAT & SEARCH COMPLETELY FIXED) ---
+// --- GLOBAL EVENT DELEGATION (FIXES "BUTTON WORKS ONCE" BUG) ---
+document.body.addEventListener('click', async (e) => {
+    // Top-right Menu
+    if (e.target.closest('#menu-btn')) {
+        document.getElementById('side-menu').classList.add('active');
+        document.getElementById('menu-backdrop').classList.add('active');
+    }
+    if (e.target.closest('#close-menu') || e.target.closest('#menu-backdrop')) {
+        document.getElementById('side-menu').classList.remove('active');
+        document.getElementById('menu-backdrop').classList.remove('active');
+    }
+    
+    // Dynamic Modals Triggers
+    if (e.target.closest('#open-yt-import')) {
+        document.getElementById('yt-import-modal').classList.add('active');
+    }
+    if (e.target.closest('#open-create-playlist')) {
+        document.getElementById('playlist-modal').classList.add('active');
+    }
+    
+    // Catches BOTH the small and large AI buttons!
+    if (e.target.closest('#open-ai-mix') || e.target.closest('#open-ai-mix-large')) {
+        document.getElementById('ai-mix-modal').classList.add('active');
+    }
+
+    // Static Pages loading
+    const pageBtn = e.target.closest('[data-page]');
+    if (pageBtn) {
+        document.getElementById('side-menu').classList.remove('active');
+        document.getElementById('menu-backdrop').classList.remove('active');
+        const url = pageBtn.getAttribute('data-page');
+        const dynamicView = document.getElementById('dynamic-view');
+        dynamicView.innerHTML = '<div style="text-align:center; padding:40px;"><i class="fa-solid fa-spinner fa-spin" style="font-size:24px; color:var(--accent);"></i></div>';
+        try {
+            const r = await fetch(url);
+            const html = await r.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            dynamicView.innerHTML = doc.querySelector('.mobile-app').innerHTML;
+            const backBtn = dynamicView.querySelector('a[href="index.html"]');
+            if (backBtn) {
+                backBtn.addEventListener('click', (ev) => {
+                    ev.preventDefault();
+                    document.querySelector('.nav-item[data-tab="home"]').click();
+                });
+            }
+        } catch (err) {
+            dynamicView.innerHTML = '<div class="empty-state-text">Failed to load.</div>';
+        }
+    }
+});
+
+
+// --- AI MIX ENGINE (WITH DEEP CONTEXT TASTE MATCHING) ---
 async function generateAiMix() {
     const promptInput = document.getElementById('ai-prompt').value.trim();
     const lang = document.getElementById('ai-lang').value;
@@ -172,16 +231,29 @@ async function generateAiMix() {
     btn.disabled = true;
 
     try {
-        // Strict prompt to stop AI from breaking output format
-        const systemPrompt = `You are a music curator. Recommend exactly 15 highly melodic songs based on: "${promptInput}". 
-        Language: ${lang}. 
-        Format exactly as: Song Title - Artist Name
-        Do NOT include numbers, bullet points, quotes, or any other text. Just the song and artist separated by a hyphen.`;
+        // --- CALCULATION: FIND USER'S TOP 5 SONGS ---
+        let tasteContext = "";
+        if (window.OCTAVE && typeof window.calculateTrackScore === 'function') {
+            const allKnown =[...Object.values(window.OCTAVE.liked || {}), ...(window.OCTAVE.recentPlayed || [])];
+            
+            // Deduplicate by VideoID so we don't pass the same song multiple times
+            const uniqueTracks = Array.from(new Map(allKnown.map(t => [t.videoId, t])).values());
+            
+            // Sort by algorithm score and extract the top 5
+            const topScored = uniqueTracks.sort((a, b) => window.calculateTrackScore(b) - window.calculateTrackScore(a)).slice(0, 5);
+            
+            if (topScored.length > 0) {
+                const trackNames = topScored.map(t => `${t.title} by ${t.author}`).join(", ");
+                tasteContext = `\nFor context to guide your music selection, the user's top 5 favorite tracks right now are: ${trackNames}. Keep their musical taste and preferred genres in mind, but make sure the 15 songs primarily fit the requested vibe.\n`;
+            }
+        }
+
+        // Strict prompt with User Context injected
+        const systemPrompt = `You are an elite music curator.\nRecommend exactly 15 highly melodic songs based on the vibe: "${promptInput}".\nLanguage: ${lang}.${tasteContext}\nFormat exactly as: Song Title - Artist Name\nDo NOT include numbers, bullet points, quotes, or any other text. Just the song and artist separated by a hyphen.`;
         
         const response = await fetch(`https://text.pollinations.ai/${encodeURIComponent(systemPrompt)}`);
         const text = await response.text();
 
-        // Strip numbers, bullets, quotes, asterisks, then filter for lines that have a dash
         const lines = text.split('\n')
             .map(l => l.replace(/^[\d\.\)\-*]+\s*/, '').replace(/["'*_]/g, '').trim()) 
             .filter(l => l.match(/[-–—]/));
@@ -191,7 +263,6 @@ async function generateAiMix() {
         const playableTracks =[];
         
         for (const line of lines.slice(0, 15)) {
-            // Split by any type of dash
             const parts = line.split(/[-–—]/);
             if(parts.length < 2) continue;
             
@@ -199,7 +270,6 @@ async function generateAiMix() {
             const artist = parts[1].trim();
             if(!title || !artist) continue;
 
-            // FIXED: Added " audio" to the search query. This stops the API from failing to find tracks.
             const results = await window.performSearch(`${title} ${artist} audio`);
             if (results && results.length > 0) {
                 playableTracks.push(results[0]);
@@ -246,45 +316,6 @@ window.openTrackOptions = (track) => {
     }
     document.getElementById('track-options-modal').classList.add('active');
 };
-
-document.body.addEventListener('click', async (e) => {
-    if (e.target.closest('#menu-btn')) {
-        document.getElementById('side-menu').classList.add('active');
-        document.getElementById('menu-backdrop').classList.add('active');
-    }
-    if (e.target.closest('#close-menu') || e.target.closest('#menu-backdrop')) {
-        document.getElementById('side-menu').classList.remove('active');
-        document.getElementById('menu-backdrop').classList.remove('active');
-    }
-    if (e.target.closest('#open-yt-import')) {
-        document.getElementById('yt-import-modal').classList.add('active');
-    }
-
-    const pageBtn = e.target.closest('[data-page]');
-    if (pageBtn) {
-        document.getElementById('side-menu').classList.remove('active');
-        document.getElementById('menu-backdrop').classList.remove('active');
-        const url = pageBtn.getAttribute('data-page');
-        const dynamicView = document.getElementById('dynamic-view');
-        dynamicView.innerHTML = '<div style="text-align:center; padding:40px;"><i class="fa-solid fa-spinner fa-spin" style="font-size:24px; color:var(--accent);"></i></div>';
-        try {
-            const r = await fetch(url);
-            const html = await r.text();
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
-            dynamicView.innerHTML = doc.querySelector('.mobile-app').innerHTML;
-            const backBtn = dynamicView.querySelector('a[href="index.html"]');
-            if (backBtn) {
-                backBtn.addEventListener('click', (ev) => {
-                    ev.preventDefault();
-                    document.querySelector('.nav-item[data-tab="home"]').click();
-                });
-            }
-        } catch (err) {
-            dynamicView.innerHTML = '<div class="empty-state-text">Failed to load.</div>';
-        }
-    }
-});
 
 document.getElementById('export-vault-btn').addEventListener('click', () => {
     document.getElementById('side-menu').classList.remove('active');
@@ -482,7 +513,7 @@ window.renderPlaylistDetail = (plName) => {
             html += `
                 <div class="list-item" style="position: relative;">
                     <img src="${track.thumb}" style="width: 48px; height: 48px; border-radius: 6px; object-fit: cover;" onclick="window.OCTAVE.queue =[...window.OCTAVE.playlists['${window.escapeHTML(plName)}']]; window.playTrackByIndex(${idx});">
-                    <div class="list-info" style="cursor: pointer;" onclick="window.OCTAVE.queue = [...window.OCTAVE.playlists['${window.escapeHTML(plName)}']]; window.playTrackByIndex(${idx});">
+                    <div class="list-info" style="cursor: pointer;" onclick="window.OCTAVE.queue =[...window.OCTAVE.playlists['${window.escapeHTML(plName)}']]; window.playTrackByIndex(${idx});">
                         <div class="list-title">${window.escapeHTML(track.title)}</div>
                         <div class="list-subtitle">${window.escapeHTML(track.author)}</div>
                     </div>
@@ -529,6 +560,7 @@ window.renderLikedSongs = () => {
     dynamicView.innerHTML = html;
 };
 
+// --- UPDATED RENDER HOME (Added Large AI Mix Button) ---
 window.renderHome = () => {
     const hour = new Date().getHours();
     let greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -565,10 +597,16 @@ window.renderHome = () => {
     if (window.fetchDailyRecommendations) window.fetchDailyRecommendations();
 
     const likedCount = Object.keys(window.OCTAVE.liked).length;
+    
+    // Inject the Large AI Button here
     playlistsDiv.innerHTML = `
         <div class="list-item" id="open-discover-mix" style="margin-bottom: 8px; cursor: pointer;">
             <div class="list-art shadow-heavy" style="background: linear-gradient(135deg, #8a2387, #e94057, #f27121); display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff;"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
             <div class="list-info"><div class="list-title">Auto-DJ Discover Mix</div><div class="list-subtitle">Endless tracks based on taste</div></div>
+        </div>
+        <div class="list-item" id="open-ai-mix-large" style="margin-bottom: 8px; cursor: pointer;">
+            <div class="list-art shadow-heavy" style="background: linear-gradient(135deg, #00c6ff, #0072ff); display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff;"><i class="fa-solid fa-robot"></i></div>
+            <div class="list-info"><div class="list-title">AI Custom Mix</div><div class="list-subtitle">Describe a vibe, AI builds it</div></div>
         </div>
         <div class="list-item" id="open-liked-songs" style="cursor: pointer;">
             <div class="list-art shadow-heavy" style="background: linear-gradient(135deg, var(--accent), #0b5c26); display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff;"><i class="fa-solid fa-heart"></i></div>
@@ -626,7 +664,6 @@ function renderLibrary() {
     });
 }
 
-// --- FIXED: RECENT SEARCHES RENDERING FUNCTION ---
 function renderRecentSearches() {
     const recentList = document.getElementById('search-recent-list');
     if (!recentList) return;
@@ -651,7 +688,6 @@ function renderRecentSearches() {
     }
 }
 
-// --- FIXED: SEARCH BOX CLEARING BEHAVIOR ---
 function bindSearch() {
     const input = document.getElementById('searchInput');
     const resContainer = document.getElementById('searchResults');
@@ -660,7 +696,6 @@ function bindSearch() {
         clearTimeout(timer);
         const query = e.target.value.trim();
         
-        // If they clear the search box, restore the "Recently Searched" view
         if (!query) { 
             resContainer.innerHTML = `
                 <div id="search-default-view">
@@ -672,7 +707,6 @@ function bindSearch() {
             return; 
         }
         
-        // Otherwise, perform the search
         timer = setTimeout(async () => {
             resContainer.innerHTML = '<div style="text-align:center; padding: 40px;"><i class="fa-solid fa-spinner fa-spin fa-2x" style="color:var(--accent);"></i></div>';
             const results = await window.performSearch(query);
@@ -703,21 +737,6 @@ function handleBravePrompt() {
     document.getElementById('get-brave')?.addEventListener('click', dismissBrave);
 }
 
-function bindHomeModals() {
-    document.getElementById('open-create-playlist')?.addEventListener('click', () => document.getElementById('playlist-modal').classList.add('active'));
-    document.getElementById('close-playlist')?.addEventListener('click', () => document.getElementById('playlist-modal').classList.remove('active'));
-
-    document.getElementById('save-playlist')?.addEventListener('click', () => {
-        const name = document.getElementById('playlist-name').value.trim();
-        if (name !== '' && !window.OCTAVE.playlists[name]) {
-            window.OCTAVE.playlists[name] =[];
-            window.saveCache();
-            document.getElementById('playlist-name').value = '';
-            document.getElementById('playlist-modal').classList.remove('active');
-            window.renderHome();
-        }
-    });
-}
 
 document.getElementById('opt-share-track')?.addEventListener('click', () => {
     if (window.OCTAVE.activeTrackForOptions) {
