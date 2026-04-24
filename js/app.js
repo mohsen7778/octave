@@ -771,18 +771,74 @@ document.getElementById('start-yt-import')?.addEventListener('click', async () =
     btn.innerHTML = 'Import';
     btn.disabled = false;
 });
-// Pure Free AI Test (Zero Auth, Zero Keys)
-setTimeout(async () => {
-    try {
-        // We encode the prompt so it can be sent safely in a URL
-        const prompt = encodeURIComponent("Give me exactly 3 heavy workout songs. Format as 'Song Name - Artist'. Do not write any other text.");
-        
-        // Call the free, keyless endpoint
-        const response = await fetch(`https://text.pollinations.ai/${prompt}`);
-        const text = await response.text();
-        
-        alert("Free AI is ALIVE! Response:\n" + text);
-    } catch (error) {
-        alert("Free AI Connection Failed: " + error);
+// --- AI MIX ENGINE ---
+async function generateAiMix() {
+    const promptInput = document.getElementById('ai-prompt').value;
+    const lang = document.getElementById('ai-lang').value;
+    const today = new Date().toDateString();
+    
+    // 1. Rate Limiting Check
+    const history = JSON.parse(localStorage.getItem('octave_gen_history') || '{"date":"","count":0}');
+    if (history.date === today && history.count >= 3) {
+        alert("Daily limit reached. Come back tomorrow."); // Keep simple for now, can move to modal later
+        return;
     }
-}, 4000); // Waits 4 seconds for your app to fully load first
+
+    // 2. Official Loading State
+    const btn = document.getElementById('generate-ai-mix');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generating...';
+    btn.disabled = true;
+
+    try {
+        // 3. Hidden Melodic/Quality Prompt
+        const systemPrompt = `Create a list of 20 high-quality, melodious songs for: ${promptInput}. Language: ${lang}. 
+        Criteria: Focus on tracks with excellent production, high melodic content, and great sound engineering. 
+        Format strictly: 'Song Title - Artist'. No extra text.`;
+        
+        const response = await fetch(`https://text.pollinations.ai/${encodeURIComponent(systemPrompt)}`);
+        const text = await response.text();
+
+        // 4. Processing tracks
+        const tracks = text.split('\n')
+            .filter(l => l.includes(' - '))
+            .map(l => {
+                const [title, artist] = l.split(' - ');
+                return { title: title.trim(), author: artist.trim() };
+            });
+
+        // 5. Search for real VideoIDs (so they are playable)
+        const playableTracks = [];
+        for (const t of tracks.slice(0, 20)) {
+            const results = await window.performSearch(`${t.title} ${t.author}`);
+            if (results.length > 0) {
+                playableTracks.push(results[0]);
+            }
+        }
+
+        // 6. Save to Vault
+        const newPlaylist = {
+            id: 'ai_' + Date.now(),
+            name: `AI Mix: ${promptInput.substring(0, 15)}`,
+            date: new Date().toLocaleDateString(),
+            tracks: playableTracks
+        };
+
+        window.OCTAVE.playlists[newPlaylist.name] = newPlaylist.tracks;
+        window.saveCache();
+        
+        // Update History
+        localStorage.setItem('octave_gen_history', JSON.stringify({date: today, count: history.count + 1}));
+        
+        document.getElementById('ai-mix-modal').classList.remove('active');
+        window.renderHome(); // Refresh UI
+    } catch (e) {
+        alert("Error generating mix.");
+    } finally {
+        btn.innerHTML = 'Generate Mix';
+        btn.disabled = false;
+    }
+}
+
+// Bindings
+document.getElementById('generate-ai-mix').addEventListener('click', generateAiMix);
+document.getElementById('close-ai-mix').addEventListener('click', () => document.getElementById('ai-mix-modal').classList.remove('active'));
