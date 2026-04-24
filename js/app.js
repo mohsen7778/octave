@@ -2,18 +2,14 @@
 // app.js — Octave Full Flagship Engine (UNSTRIPPED + AI FIXED)
 // ============================================================
 
-// --- PWA INSTALL LOGIC (FIXED) ---
+// --- PWA INSTALL LOGIC ---
 let deferredInstallPrompt;
 
 window.addEventListener('beforeinstallprompt', (e) => {
-    // Prevent the default mini-infobar from appearing on mobile
     e.preventDefault();
-    // Stash the event so it can be triggered later.
     deferredInstallPrompt = e;
     
-    // Only show the custom modal if they haven't dismissed it before
     if (!localStorage.getItem('installPromptDismissed')) {
-        // Wait 3 seconds so we don't bombard them exactly when the app opens
         setTimeout(() => {
             const installModal = document.getElementById('install-modal');
             if (installModal) installModal.classList.add('active');
@@ -24,7 +20,6 @@ window.addEventListener('beforeinstallprompt', (e) => {
 document.addEventListener('DOMContentLoaded', () => {
     
     // --- SHARED TRACK BOOT SEQUENCE ---
-    // Reads URL for shared song, auto-loads it, opens full player, then scrubs the URL clean
     const params = new URLSearchParams(window.location.search);
     const shareV = params.get('v');
     if (shareV) {
@@ -37,10 +32,8 @@ document.addEventListener('DOMContentLoaded', () => {
         window.OCTAVE.currentIndex = 0;
         window.saveCache();
         
-        // Clean URL so refreshing doesn't replay it
         window.history.replaceState({}, document.title, window.location.pathname);
         
-        // Let the player engines load, auto-play the shared track, and force full screen
         setTimeout(() => {
             if(window.playTrackByIndex) {
                 window.playTrackByIndex(0);
@@ -52,7 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- PWA INSTALL BUTTON BINDINGS ---
     document.getElementById('close-install')?.addEventListener('click', () => {
         document.getElementById('install-modal').classList.remove('active');
-        localStorage.setItem('installPromptDismissed', 'true'); // Remembers not to bother them again
+        localStorage.setItem('installPromptDismissed', 'true');
     });
 
     document.getElementById('confirm-install')?.addEventListener('click', async () => {
@@ -80,7 +73,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const dynamicView = document.getElementById('dynamic-view');
     const views = {
         home: dynamicView.innerHTML,
-        // SEARCH VIEW: YouTube Import button updated with official branding
         search: `
             <header class="search-header" style="padding: 40px 20px 20px 20px; background: var(--bg-deep);">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
@@ -102,7 +94,6 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
             <div class="bottom-spacer"></div>
         `,
-        // LIBRARY VIEW: YouTube Import button updated with official branding
         library: `
             <header class="search-header" style="padding: 40px 20px 20px 20px; display: flex; justify-content: space-between; align-items: center;">
                 <h1 class="search-title" style="font-size: 24px; font-weight: 700;">Library</h1>
@@ -134,7 +125,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 bindHomeModals();
             } else {
                 dynamicView.innerHTML = views[tab];
-                if (tab === 'search') bindSearch();
+                if (tab === 'search') {
+                    bindSearch();
+                    renderRecentSearches(); // FIXED: Now actually renders search history
+                }
                 if (tab === 'library') renderLibrary();
             }
         });
@@ -166,7 +160,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// --- AI MIX ENGINE (LIMITS REMOVED & SEARCH OPTIMIZED) ---
+// --- AI MIX ENGINE (FORMAT & SEARCH COMPLETELY FIXED) ---
 async function generateAiMix() {
     const promptInput = document.getElementById('ai-prompt').value.trim();
     const lang = document.getElementById('ai-lang').value;
@@ -178,30 +172,41 @@ async function generateAiMix() {
     btn.disabled = true;
 
     try {
-        const systemPrompt = `Recommend exactly 20 melodious and high-quality songs based on: "${promptInput}". 
-        Language: ${lang}. Focus on tracks that sound exceptionally good with clear melody.
-        Format strictly: 'Song Title - Artist'. No extra text. One per line.`;
+        // Strict prompt to stop AI from breaking output format
+        const systemPrompt = `You are a music curator. Recommend exactly 15 highly melodic songs based on: "${promptInput}". 
+        Language: ${lang}. 
+        Format exactly as: Song Title - Artist Name
+        Do NOT include numbers, bullet points, quotes, or any other text. Just the song and artist separated by a hyphen.`;
         
         const response = await fetch(`https://text.pollinations.ai/${encodeURIComponent(systemPrompt)}`);
         const text = await response.text();
 
-        // Cleans numbering and formatting from AI output, robustly handling any dash or hyphen variations
+        // Strip numbers, bullets, quotes, asterisks, then filter for lines that have a dash
         const lines = text.split('\n')
-            .map(l => l.replace(/^\d+[\.\)]\s*/, '').trim()) 
-            .filter(l => l.match(/\s+[-–—]\s+/));
+            .map(l => l.replace(/^[\d\.\)\-*]+\s*/, '').replace(/["'*_]/g, '').trim()) 
+            .filter(l => l.match(/[-–—]/));
 
-        if (lines.length === 0) throw new Error("Format invalid.");
+        if (lines.length === 0) throw new Error("Format invalid. Please try a different prompt.");
 
         const playableTracks =[];
-        // Only search for top 15 to ensure stability
+        
         for (const line of lines.slice(0, 15)) {
-            // Split using robust regex to handle standard hyphens, en-dashes, and em-dashes
-            const[title, artist] = line.split(/\s+[-–—]\s+/);
-            const results = await window.performSearch(`${title} ${artist}`);
-            if (results.length > 0) playableTracks.push(results[0]);
+            // Split by any type of dash
+            const parts = line.split(/[-–—]/);
+            if(parts.length < 2) continue;
+            
+            const title = parts[0].trim();
+            const artist = parts[1].trim();
+            if(!title || !artist) continue;
+
+            // FIXED: Added " audio" to the search query. This stops the API from failing to find tracks.
+            const results = await window.performSearch(`${title} ${artist} audio`);
+            if (results && results.length > 0) {
+                playableTracks.push(results[0]);
+            }
         }
 
-        if (playableTracks.length === 0) throw new Error("Tracks not found.");
+        if (playableTracks.length === 0) throw new Error("Tracks not found. API network may be overloaded.");
 
         const dateStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
         const finalName = `AI Mix: ${promptInput.substring(0, 10)} [${dateStr}]`;
@@ -211,8 +216,11 @@ async function generateAiMix() {
 
         document.getElementById('ai-mix-modal').classList.remove('active');
         document.getElementById('ai-prompt').value = '';
-        window.renderHome();
-        alert(`Successfully generated "${finalName}"!`);
+        
+        const activeNav = document.querySelector('.nav-item.active')?.getAttribute('data-tab');
+        if(activeNav === 'home') window.renderHome();
+        
+        alert(`Successfully generated "${finalName}" with ${playableTracks.length} tracks!`);
 
     } catch (e) {
         alert("AI Error: " + e.message);
@@ -326,7 +334,6 @@ document.getElementById('fp-lyrics-btn').addEventListener('click', async () => {
     fpContent.innerHTML = fontHeader + `<div id="lyrics-content">${html}</div>`;
 });
 
-// Share button direct from the full player
 document.getElementById('fp-share-btn')?.addEventListener('click', () => {
     if (window.OCTAVE.currentIndex >= 0) {
         const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
@@ -474,7 +481,7 @@ window.renderPlaylistDetail = (plName) => {
         tracks.forEach((track, idx) => {
             html += `
                 <div class="list-item" style="position: relative;">
-                    <img src="${track.thumb}" style="width: 48px; height: 48px; border-radius: 6px; object-fit: cover;" onclick="window.OCTAVE.queue = [...window.OCTAVE.playlists['${window.escapeHTML(plName)}']]; window.playTrackByIndex(${idx});">
+                    <img src="${track.thumb}" style="width: 48px; height: 48px; border-radius: 6px; object-fit: cover;" onclick="window.OCTAVE.queue =[...window.OCTAVE.playlists['${window.escapeHTML(plName)}']]; window.playTrackByIndex(${idx});">
                     <div class="list-info" style="cursor: pointer;" onclick="window.OCTAVE.queue = [...window.OCTAVE.playlists['${window.escapeHTML(plName)}']]; window.playTrackByIndex(${idx});">
                         <div class="list-title">${window.escapeHTML(track.title)}</div>
                         <div class="list-subtitle">${window.escapeHTML(track.author)}</div>
@@ -522,7 +529,6 @@ window.renderLikedSongs = () => {
     dynamicView.innerHTML = html;
 };
 
-// --- HOME RENDERER (WITH FLAGSHIP AUTO-DJ) ---
 window.renderHome = () => {
     const hour = new Date().getHours();
     let greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -620,6 +626,32 @@ function renderLibrary() {
     });
 }
 
+// --- FIXED: RECENT SEARCHES RENDERING FUNCTION ---
+function renderRecentSearches() {
+    const recentList = document.getElementById('search-recent-list');
+    if (!recentList) return;
+
+    if (window.OCTAVE.recentSearches && window.OCTAVE.recentSearches.length > 0) {
+        recentList.innerHTML = '';
+        window.OCTAVE.recentSearches.forEach(track => {
+            const el = document.createElement('div'); 
+            el.className = 'list-item';
+            el.innerHTML = `
+                <img src="${track.thumb}" style="width: 48px; height: 48px; border-radius: 6px; object-fit: cover; cursor: pointer;">
+                <div class="list-info" style="cursor: pointer;">
+                    <div class="list-title">${window.escapeHTML(track.title)}</div>
+                    <div class="list-subtitle">${window.escapeHTML(track.author)}</div>
+                </div>
+            `;
+            el.addEventListener('click', () => window.playTrack(track));
+            recentList.appendChild(el);
+        });
+    } else {
+        recentList.innerHTML = '<div class="empty-state-text" style="padding-top: 10px;">No recent searches yet.</div>';
+    }
+}
+
+// --- FIXED: SEARCH BOX CLEARING BEHAVIOR ---
 function bindSearch() {
     const input = document.getElementById('searchInput');
     const resContainer = document.getElementById('searchResults');
@@ -627,14 +659,33 @@ function bindSearch() {
     input.addEventListener('input', (e) => {
         clearTimeout(timer);
         const query = e.target.value.trim();
-        if (!query) { document.getElementById('search-default-view').style.display = 'block'; return; }
-        document.getElementById('search-default-view').style.display = 'none';
+        
+        // If they clear the search box, restore the "Recently Searched" view
+        if (!query) { 
+            resContainer.innerHTML = `
+                <div id="search-default-view">
+                    <h3 style="font-size: 16px; margin-bottom: 16px;">Recently Searched</h3>
+                    <div class="vertical-list" id="search-recent-list" style="padding-right: 0;"></div>
+                </div>
+            `;
+            renderRecentSearches(); 
+            return; 
+        }
+        
+        // Otherwise, perform the search
         timer = setTimeout(async () => {
+            resContainer.innerHTML = '<div style="text-align:center; padding: 40px;"><i class="fa-solid fa-spinner fa-spin fa-2x" style="color:var(--accent);"></i></div>';
             const results = await window.performSearch(query);
             resContainer.innerHTML = '';
+            
+            if (results.length === 0) {
+                resContainer.innerHTML = '<div class="empty-state-text">No results found.</div>';
+                return;
+            }
+            
             results.slice(0, 15).forEach(track => {
                 const el = document.createElement('div'); el.className = 'list-item';
-                el.innerHTML = `<img src="${track.thumb}" style="width: 48px; height: 48px; border-radius: 6px; object-fit: cover;"><div class="list-info"><div class="list-title">${window.escapeHTML(track.title)}</div><div class="list-subtitle">${window.escapeHTML(track.author)}</div></div>`;
+                el.innerHTML = `<img src="${track.thumb}" style="width: 48px; height: 48px; border-radius: 6px; object-fit: cover; cursor: pointer;"><div class="list-info" style="cursor: pointer;"><div class="list-title">${window.escapeHTML(track.title)}</div><div class="list-subtitle">${window.escapeHTML(track.author)}</div></div>`;
                 el.addEventListener('click', () => window.playTrack(track));
                 resContainer.appendChild(el);
             });
