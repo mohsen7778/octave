@@ -1,6 +1,6 @@
 // ============================================================
 // player.js — Octave Hybrid Audio Engine
-// Chrome Native Engine (Stable 1-Stream Session) | Brave IFrame
+// Chrome Native Engine (Clean Pipeline) | Brave IFrame
 // ============================================================
 
 window.escapeHTML = (str) => {
@@ -42,7 +42,7 @@ if (navigator.brave && navigator.brave.isBrave) {
         }
     });
 } else {
-    console.log("Octave: Chrome/Safari detected. Using Stable Single-Stream Native Engine.");
+    console.log("Octave: Chrome/Safari detected. Using Clean Native Engine.");
 }
 
 window.initTrackStats = (videoId) => {
@@ -157,7 +157,6 @@ window.pipedIdx = Math.floor(Math.random() * window.PIPED.length);
 // ─── STABLE NATIVE ENGINE (CHROME) ──────────────────────────────────────────
 const AUDIO = new Audio();
 AUDIO.preload = 'auto';
-// Fix 5: Lock media session properties
 AUDIO.setAttribute("playsinline", "true");
 AUDIO.setAttribute("webkit-playsinline", "true");
 AUDIO.crossOrigin = "anonymous";
@@ -166,8 +165,6 @@ let audioUnlocked = false;
 function unlockAudioForSafari() {
     if (audioUnlocked) return;
     audioUnlocked = true;
-    // Fix 1: Just a raw empty play catch on first user interaction to bless the element
-    AUDIO.play().catch(() => {});
     try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
         const buf = ctx.createBuffer(1, 1, 22050);
@@ -219,7 +216,7 @@ async function getDirectAudioUrl(videoId) {
 const tryNextStream = async (videoId) => {
     updatePlayIcons('fa-solid fa-spinner fa-spin'); 
     
-    // Fix 2: Fetch URL completely BEFORE assigning src
+    // Fetch URL completely BEFORE assigning src
     const url = await getDirectAudioUrl(videoId);
     
     if (url) {
@@ -233,7 +230,6 @@ const tryNextStream = async (videoId) => {
         console.error("All proxies failed to load track.");
         updatePlayIcons('fa-solid fa-play');
         window.OCTAVE.isPlaying = false;
-        // Fix 3: If stream genuinely fails to load, skip track cleanly
         window.playNextLogic(); 
     }
 };
@@ -241,7 +237,6 @@ const tryNextStream = async (videoId) => {
 AUDIO.addEventListener('error', () => {
     if (window.AUDIO_ENGINE !== 'native') return;
     
-    // Fix 3: NEVER change src during playback. If it errors out, the session is dead. Move to next.
     console.error("Stable media stream broken. Skipping to next track.");
     window.playNextLogic();
 });
@@ -250,7 +245,6 @@ AUDIO.addEventListener('playing', () => {
     if (window.AUDIO_ENGINE !== 'native') return;
     window.OCTAVE.isPlaying = true;
     
-    // Fix 4: Set hardware playback state
     if ('mediaSession' in navigator) {
         navigator.mediaSession.playbackState = "playing";
     }
@@ -264,7 +258,6 @@ AUDIO.addEventListener('pause', () => {
     if (window.AUDIO_ENGINE !== 'native') return;
     window.OCTAVE.isPlaying = false;
     
-    // Fix 4: Set hardware playback state
     if ('mediaSession' in navigator) {
         navigator.mediaSession.playbackState = "paused";
     }
