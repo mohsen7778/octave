@@ -1,6 +1,6 @@
 // ============================================================
 // player.js — Octave Hybrid Audio Engine
-// Original Chrome Native Engine (Piped API Racer) | Untouched IFrame for Brave
+// PiP Background Keep-Alive for Chrome | Untouched IFrame for Brave
 // ============================================================
 
 window.escapeHTML = (str) => {
@@ -32,7 +32,7 @@ window.OCTAVE = {
 };
 
 // ─── HYBRID ENGINE ROUTER ──────────────────────────────────────────────────
-window.AUDIO_ENGINE = 'native'; // Force Native for Chrome/Safari background autoplay
+window.AUDIO_ENGINE = 'native'; // Chrome uses Native Audio + PiP Hack
 
 if (navigator.brave && navigator.brave.isBrave) {
     navigator.brave.isBrave().then(isBrave => {
@@ -42,7 +42,7 @@ if (navigator.brave && navigator.brave.isBrave) {
         }
     });
 } else {
-    console.log("Octave: Chrome/Safari detected. Using Piped API Native Engine.");
+    console.log("Octave: Chrome/Safari detected. Using Piped API Native Engine with PiP Keep-Alive.");
 }
 
 window.initTrackStats = (videoId) => {
@@ -152,7 +152,73 @@ fetch('https://api.invidious.io/instances.json?sort_by=health')
 
 window.invIdx = Math.floor(Math.random() * window.INVIDIOUS.length);
 
-// ─── BLAZING FAST NATIVE ENGINE (ORIGINAL DELAY FOR CHROME BACKGROUND) ─────────
+// ─── PIPED KEEP-ALIVE SYSTEM (PICTURE-IN-PICTURE) ──────────────────────────
+let pipVideo = null;
+let pipCanvas = null;
+
+function initPiPKeepAlive() {
+    if (!document.pictureInPictureEnabled || window.AUDIO_ENGINE !== 'native') return;
+    
+    pipVideo = document.createElement('video');
+    pipVideo.id = 'octave-pip-video';
+    pipVideo.muted = true;
+    pipVideo.playsInline = true;
+    pipVideo.style.display = 'none';
+    document.body.appendChild(pipVideo);
+
+    pipCanvas = document.createElement('canvas');
+    pipCanvas.width = 512;
+    pipCanvas.height = 512;
+    
+    const stream = pipCanvas.captureStream(1); // 1 frame per second is enough
+    pipVideo.srcObject = stream;
+}
+
+function updatePiPArtwork(track) {
+    if (!pipCanvas || window.AUDIO_ENGINE !== 'native') return;
+    const ctx = pipCanvas.getContext('2d');
+    const img = new Image();
+    img.crossOrigin = "Anonymous";
+    img.onload = () => {
+        ctx.fillStyle = '#121212';
+        ctx.fillRect(0, 0, 512, 512);
+        ctx.drawImage(img, 0, 0, 512, 512);
+        
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(0, 400, 512, 112);
+        
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 26px sans-serif';
+        ctx.fillText(track.title.substring(0, 32) + (track.title.length > 32 ? '...' : ''), 20, 445);
+        
+        ctx.fillStyle = '#aaaaaa';
+        ctx.font = '20px sans-serif';
+        ctx.fillText(track.author, 20, 485);
+    };
+    img.src = track.thumb;
+}
+
+window.activatePiP = async () => {
+    if (!pipVideo || !document.pictureInPictureEnabled || window.AUDIO_ENGINE !== 'native') return;
+    try {
+        await pipVideo.play();
+        if (document.pictureInPictureElement !== pipVideo) {
+            await pipVideo.requestPictureInPicture();
+        }
+    } catch (e) {
+        console.log('PiP keep-alive skipped/failed:', e);
+    }
+};
+
+window.deactivatePiP = async () => {
+    if (document.pictureInPictureElement === pipVideo) {
+        try { await document.exitPictureInPicture(); } catch(e) {}
+    }
+    if (pipVideo) pipVideo.pause();
+};
+
+
+// ─── BLAZING FAST NATIVE ENGINE (CHROME) ──────────────────────────────────
 const AUDIO = new Audio();
 AUDIO.preload = 'auto';
 
@@ -176,7 +242,6 @@ function unlockAudioForSafari() {
 document.addEventListener('click', unlockAudioForSafari, { once: true });
 document.addEventListener('touchstart', unlockAudioForSafari, { once: true });
 
-// RACE THE SERVERS (Swapped to Piped API to fix the Invidious freeze)
 async function getFastestStreamUrl(videoId) {
     return new Promise((resolve) => {
         const controllers = [];
@@ -202,7 +267,6 @@ async function getFastestStreamUrl(videoId) {
                 }).catch(() => {});
         });
 
-        // Exact original timeout fallback structure
         setTimeout(() => {
             if (!resolved) {
                 resolved = true;
@@ -227,6 +291,8 @@ function preloadNextTrackInQueue() {
 }
 
 const tryNextStream = async (videoId) => {
+    updatePlayIcons('fa-solid fa-spinner fa-spin'); 
+    
     if (PRELOAD_AUDIO.src && PRELOAD_AUDIO.src.includes(videoId)) {
         AUDIO.src = PRELOAD_AUDIO.src;
     } else {
@@ -234,7 +300,10 @@ const tryNextStream = async (videoId) => {
     }
     
     AUDIO.load();
-    AUDIO.play().catch(() => {});
+    AUDIO.play().catch(() => {
+        updatePlayIcons('fa-solid fa-play');
+        window.OCTAVE.isPlaying = false;
+    });
 };
 
 AUDIO.addEventListener('playing', () => {
@@ -249,7 +318,10 @@ AUDIO.addEventListener('playing', () => {
 AUDIO.addEventListener('pause', () => {
     if (window.AUDIO_ENGINE !== 'native') return;
     window.OCTAVE.isPlaying = false;
-    updatePlayIcons('fa-solid fa-play');
+    const fpIcon = document.querySelector('#fp-play i');
+    if (fpIcon && !fpIcon.classList.contains('fa-spinner')) {
+        updatePlayIcons('fa-solid fa-play');
+    }
     clearInterval(progressTimer);
 });
 
@@ -269,7 +341,8 @@ AUDIO.addEventListener('error', async () => {
     }
 });
 
-// ─── IFRAME ENGINE (BRAVE - UNTOUCHED) ──────────────────────────────────────────────
+
+// ─── IFRAME ENGINE SETUP (BRAVE - UNTOUCHED) ──────────────────────────────────────────────
 let YTP = null;
 let ytReady = false;
 
@@ -321,7 +394,6 @@ function onYTS(e) {
 let progressTimer = null;
 let sleepTimerId = null;
 
-// ADDED MISSING LOGIC: So Brave actually auto-plays the next track
 window.playNextLogic = () => {
     if (window.OCTAVE.currentIndex >= 0 && window.OCTAVE.currentIndex < window.OCTAVE.queue.length - 1) {
         window.playTrackByIndex(window.OCTAVE.currentIndex + 1);
@@ -331,6 +403,7 @@ window.playNextLogic = () => {
         window.OCTAVE.isPlaying = false;
         updatePlayIcons('fa-solid fa-play');
         clearInterval(progressTimer);
+        window.deactivatePiP();
     }
 };
 
@@ -343,7 +416,6 @@ function handleTrackEnded() {
         window.OCTAVE.playStats[track.videoId].completes++;
         window.saveCache();
     }
-    // Triggers next track automatically
     if (window.playNextLogic) window.playNextLogic();
 }
 
@@ -361,7 +433,13 @@ window.togglePlay = () => {
         if (!YTP) return;
         window.OCTAVE.isPlaying ? YTP.pauseVideo() : YTP.playVideo();
     } else {
-        window.OCTAVE.isPlaying ? AUDIO.pause() : AUDIO.play().catch(() => {});
+        if (window.OCTAVE.isPlaying) {
+            AUDIO.pause();
+            window.deactivatePiP();
+        } else {
+            AUDIO.play().catch(() => {});
+            window.activatePiP();
+        }
     }
 };
 
@@ -489,12 +567,14 @@ window.playTrackByIndex = (index) => {
 
     updatePlayerUI(track);
     updateMediaSession(track);
+    updatePiPArtwork(track);
 
     if (window.AUDIO_ENGINE === 'iframe') {
         if (ytReady && YTP) YTP.loadVideoById({ videoId: track.videoId });
     } else {
         AUDIO.pause();
-        tryNextStream(track.videoId); 
+        tryNextStream(track.videoId);
+        window.activatePiP();
     }
 };
 
@@ -900,6 +980,8 @@ window.fetchFullArtistProfile = async (artist) => {
 
 document.addEventListener('DOMContentLoaded', () => {
     
+    initPiPKeepAlive();
+
     if (window.OCTAVE.currentIndex === -1 && window.OCTAVE.recentPlayed.length > 0) {
         window.OCTAVE.queue = [window.OCTAVE.recentPlayed[0]];
         window.OCTAVE.currentIndex = 0;
