@@ -1,6 +1,6 @@
 // ============================================================
 // player.js — Octave Hybrid Audio Engine
-// Chrome Native Engine Restored (Background Play Fix) | Brave IFrame
+// Chrome Native Engine (Original Fast Race Restored) | Brave IFrame
 // ============================================================
 
 window.escapeHTML = (str) => {
@@ -32,7 +32,7 @@ window.OCTAVE = {
 };
 
 // ─── HYBRID ENGINE ROUTER ──────────────────────────────────────────────────
-window.AUDIO_ENGINE = 'native'; // Back to Native for Chrome/Safari background play
+window.AUDIO_ENGINE = 'native'; // Chrome uses the Native Engine
 
 if (navigator.brave && navigator.brave.isBrave) {
     navigator.brave.isBrave().then(isBrave => {
@@ -42,7 +42,7 @@ if (navigator.brave && navigator.brave.isBrave) {
         }
     });
 } else {
-    console.log("Octave: Chrome/Safari detected. Using Native Engine for Background Play.");
+    console.log("Octave: Chrome/Safari detected. Using Original Native Racing Engine.");
 }
 
 window.initTrackStats = (videoId) => {
@@ -145,7 +145,7 @@ fetch('https://api.invidious.io/instances.json?sort_by=health')
 
 window.invIdx = Math.floor(Math.random() * window.INVIDIOUS.length);
 
-// ─── NATIVE ENGINE (CHROME BACKGROUND PLAY RESTORED) ───────────────────────
+// ─── BLAZING FAST NATIVE ENGINE (CHROME BACKGROUND PLAY RESTORED) ─────────────────
 const AUDIO = new Audio();
 AUDIO.preload = 'auto';
 
@@ -169,59 +169,60 @@ function unlockAudioForSafari() {
 document.addEventListener('click', unlockAudioForSafari, { once: true });
 document.addEventListener('touchstart', unlockAudioForSafari, { once: true });
 
-// The async fetcher that causes the slight delay you remembered,
-// but securely fetches the direct Google CDN URL so it doesn't fail.
+// 1. EXACT ORIGINAL LOGIC: RACE THE SERVERS (Chrome CORS Bypass)
 async function getFastestStreamUrl(videoId) {
-    for (let i = 0; i < window.INVIDIOUS.length; i++) {
-        const base = window.INVIDIOUS[(window.invIdx + i) % window.INVIDIOUS.length];
-        try {
+    return new Promise((resolve) => {
+        const controllers =[];
+        let resolved = false;
+
+        const racers = [...window.INVIDIOUS].sort(() => 0.5 - Math.random()).slice(0, 4);
+        
+        racers.forEach(base => {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 4000); // 4s timeout
+            controllers.push(controller);
+            // Pinging the API directly avoids the Chrome CORS block
+            const pingUrl = `${base}/api/v1/videos/${videoId}?fields=videoId`;
             
-            const res = await fetch(`${base}/api/v1/videos/${videoId}?fields=adaptiveFormats`, {
-                signal: controller.signal
-            });
-            clearTimeout(timeoutId);
-            
-            if (res.ok) {
-                const data = await res.json();
-                const audioStream = data.adaptiveFormats?.find(f => f.itag === 140 || f.itag === '140');
-                if (audioStream && audioStream.url) {
-                    window.invIdx = (window.invIdx + i) % window.INVIDIOUS.length;
-                    return audioStream.url;
-                }
+            fetch(pingUrl, { method: 'GET', signal: controller.signal })
+                .then(res => {
+                    if (res.ok && !resolved) {
+                        resolved = true;
+                        controllers.forEach(c => c.abort());
+                        resolve(`${base}/latest_version?id=${videoId}&itag=140&local=true`);
+                    }
+                }).catch(() => {});
+        });
+
+        setTimeout(() => {
+            if (!resolved) {
+                resolved = true;
+                controllers.forEach(c => c.abort());
+                resolve(`${racers[0]}/latest_version?id=${videoId}&itag=140&local=true`);
             }
-        } catch (e) {
-            continue; // Skip to next server if this one blocks us
-        }
-    }
-    // Fallback if all APIs fail
-    return `${window.INVIDIOUS[window.invIdx]}/latest_version?id=${videoId}&itag=140`;
+        }, 2500);
+    });
 }
 
+// 2. GHOST PRE-BUFFERING
 function preloadNextTrackInQueue() {
     if (window.AUDIO_ENGINE !== 'native' || window.OCTAVE.currentIndex < 0) return;
     const nextIdx = window.OCTAVE.currentIndex + 1;
     if (nextIdx < window.OCTAVE.queue.length) {
         const nextId = window.OCTAVE.queue[nextIdx].videoId;
         getFastestStreamUrl(nextId).then(fastUrl => {
-            if (fastUrl) {
-                PRELOAD_AUDIO.src = fastUrl;
-                PRELOAD_AUDIO.load(); 
-            }
+            PRELOAD_AUDIO.src = fastUrl;
+            PRELOAD_AUDIO.load(); 
         });
     }
 }
 
-// Exactly the async flow that worked for you in the past!
 const tryNextStream = async (videoId) => {
-    updatePlayIcons('fa-solid fa-spinner fa-spin'); // Let user know it's loading
+    updatePlayIcons('fa-solid fa-spinner fa-spin'); // Let you know it's trying to load
     
     if (PRELOAD_AUDIO.src && PRELOAD_AUDIO.src.includes(videoId)) {
         AUDIO.src = PRELOAD_AUDIO.src;
     } else {
-        const url = await getFastestStreamUrl(videoId);
-        AUDIO.src = url;
+        AUDIO.src = await getFastestStreamUrl(videoId);
     }
     
     AUDIO.load();
@@ -257,23 +258,17 @@ AUDIO.addEventListener('ended', () => {
 
 AUDIO.addEventListener('error', async () => {
     if (window.AUDIO_ENGINE !== 'native') return;
-    // If the stream dies, rotate server and fetch a fresh link
-    window.invIdx = (window.invIdx + 1) % window.INVIDIOUS.length;
     if (window.OCTAVE.currentIndex >= 0) {
         const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
-        const currentPos = AUDIO.currentTime || 0;
-        const newUrl = await getFastestStreamUrl(track.videoId);
-        if (newUrl) {
-            AUDIO.src = newUrl;
-            AUDIO.currentTime = currentPos;
-            AUDIO.load();
-            AUDIO.play().catch(() => {});
-        }
+        const currentPos = AUDIO.currentTime;
+        AUDIO.src = await getFastestStreamUrl(track.videoId);
+        AUDIO.currentTime = currentPos; 
+        AUDIO.play().catch(() => {});
     }
 });
 
 
-// ─── IFRAME ENGINE SETUP (BRAVE - 100% UNTOUCHED) ─────────────────────────────
+// ─── IFRAME ENGINE SETUP (BRAVE) ──────────────────────────────────────────────
 let YTP = null;
 let ytReady = false;
 
@@ -325,18 +320,6 @@ function onYTS(e) {
 let progressTimer = null;
 let sleepTimerId = null;
 
-function handleTrackEnded() {
-    window.OCTAVE.isPlaying = false;
-    clearInterval(progressTimer);
-    if (window.OCTAVE.currentIndex >= 0) {
-        const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
-        window.initTrackStats(track.videoId);
-        window.OCTAVE.playStats[track.videoId].completes++;
-        window.saveCache();
-    }
-    if (window.playNextLogic) window.playNextLogic();
-}
-
 window.playNextLogic = () => {
     if (window.OCTAVE.currentIndex >= 0 && window.OCTAVE.currentIndex < window.OCTAVE.queue.length - 1) {
         window.playTrackByIndex(window.OCTAVE.currentIndex + 1);
@@ -348,6 +331,18 @@ window.playNextLogic = () => {
         clearInterval(progressTimer);
     }
 };
+
+function handleTrackEnded() {
+    window.OCTAVE.isPlaying = false;
+    clearInterval(progressTimer);
+    if (window.OCTAVE.currentIndex >= 0) {
+        const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
+        window.initTrackStats(track.videoId);
+        window.OCTAVE.playStats[track.videoId].completes++;
+        window.saveCache();
+    }
+    window.playNextLogic();
+}
 
 function updatePlayIcons(iconClass) {
     const mini = document.querySelector('.play-btn-mini i');
