@@ -1,6 +1,6 @@
 // ============================================================
 // player.js — Octave Hybrid Audio Engine
-// PiP Background Keep-Alive for Chrome | Untouched IFrame for Brave
+// Chrome Native Engine (Original Racer + Gesture Fix) | Brave IFrame
 // ============================================================
 
 window.escapeHTML = (str) => {
@@ -32,7 +32,7 @@ window.OCTAVE = {
 };
 
 // ─── HYBRID ENGINE ROUTER ──────────────────────────────────────────────────
-window.AUDIO_ENGINE = 'native'; // Chrome uses Native Audio + PiP Hack
+window.AUDIO_ENGINE = 'native'; // Native for Chrome background play
 
 if (navigator.brave && navigator.brave.isBrave) {
     navigator.brave.isBrave().then(isBrave => {
@@ -42,7 +42,7 @@ if (navigator.brave && navigator.brave.isBrave) {
         }
     });
 } else {
-    console.log("Octave: Chrome/Safari detected. Using Piped API Native Engine with PiP Keep-Alive.");
+    console.log("Octave: Chrome/Safari detected. Using Native Racing Engine.");
 }
 
 window.initTrackStats = (videoId) => {
@@ -133,13 +133,6 @@ window.INVIDIOUS =[
     'https://invidious.lunar.icu'
 ];
 
-window.PIPED = [
-    'https://pipedapi.kavin.rocks',
-    'https://pipedapi.smnz.de',
-    'https://api.piped.projectsegfau.lt',
-    'https://piped-api.lunar.icu'
-];
-
 fetch('https://api.invidious.io/instances.json?sort_by=health')
     .then(res => res.json())
     .then(data => {
@@ -152,73 +145,7 @@ fetch('https://api.invidious.io/instances.json?sort_by=health')
 
 window.invIdx = Math.floor(Math.random() * window.INVIDIOUS.length);
 
-// ─── PIPED KEEP-ALIVE SYSTEM (PICTURE-IN-PICTURE) ──────────────────────────
-let pipVideo = null;
-let pipCanvas = null;
-
-function initPiPKeepAlive() {
-    if (!document.pictureInPictureEnabled || window.AUDIO_ENGINE !== 'native') return;
-    
-    pipVideo = document.createElement('video');
-    pipVideo.id = 'octave-pip-video';
-    pipVideo.muted = true;
-    pipVideo.playsInline = true;
-    pipVideo.style.display = 'none';
-    document.body.appendChild(pipVideo);
-
-    pipCanvas = document.createElement('canvas');
-    pipCanvas.width = 512;
-    pipCanvas.height = 512;
-    
-    const stream = pipCanvas.captureStream(1); // 1 frame per second is enough
-    pipVideo.srcObject = stream;
-}
-
-function updatePiPArtwork(track) {
-    if (!pipCanvas || window.AUDIO_ENGINE !== 'native') return;
-    const ctx = pipCanvas.getContext('2d');
-    const img = new Image();
-    img.crossOrigin = "Anonymous";
-    img.onload = () => {
-        ctx.fillStyle = '#121212';
-        ctx.fillRect(0, 0, 512, 512);
-        ctx.drawImage(img, 0, 0, 512, 512);
-        
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(0, 400, 512, 112);
-        
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 26px sans-serif';
-        ctx.fillText(track.title.substring(0, 32) + (track.title.length > 32 ? '...' : ''), 20, 445);
-        
-        ctx.fillStyle = '#aaaaaa';
-        ctx.font = '20px sans-serif';
-        ctx.fillText(track.author, 20, 485);
-    };
-    img.src = track.thumb;
-}
-
-window.activatePiP = async () => {
-    if (!pipVideo || !document.pictureInPictureEnabled || window.AUDIO_ENGINE !== 'native') return;
-    try {
-        await pipVideo.play();
-        if (document.pictureInPictureElement !== pipVideo) {
-            await pipVideo.requestPictureInPicture();
-        }
-    } catch (e) {
-        console.log('PiP keep-alive skipped/failed:', e);
-    }
-};
-
-window.deactivatePiP = async () => {
-    if (document.pictureInPictureElement === pipVideo) {
-        try { await document.exitPictureInPicture(); } catch(e) {}
-    }
-    if (pipVideo) pipVideo.pause();
-};
-
-
-// ─── BLAZING FAST NATIVE ENGINE (CHROME) ──────────────────────────────────
+// ─── BLAZING FAST NATIVE ENGINE (CHROME) ──────────────────────────────────────
 const AUDIO = new Audio();
 AUDIO.preload = 'auto';
 
@@ -242,27 +169,25 @@ function unlockAudioForSafari() {
 document.addEventListener('click', unlockAudioForSafari, { once: true });
 document.addEventListener('touchstart', unlockAudioForSafari, { once: true });
 
+// ORIGINAL RACER LOGIC: Bypasses dead servers fast
 async function getFastestStreamUrl(videoId) {
     return new Promise((resolve) => {
         const controllers = [];
         let resolved = false;
 
-        const racers = [...window.PIPED].sort(() => 0.5 - Math.random()).slice(0, 3);
+        const racers = [...window.INVIDIOUS].sort(() => 0.5 - Math.random()).slice(0, 4);
         
         racers.forEach(base => {
             const controller = new AbortController();
             controllers.push(controller);
+            const pingUrl = `${base}/api/v1/videos/${videoId}?fields=videoId`;
             
-            fetch(`${base}/streams/${videoId}`, { method: 'GET', signal: controller.signal })
-                .then(res => res.json())
-                .then(data => {
-                    if (data && data.audioStreams && !resolved) {
-                        const stream = data.audioStreams.find(s => s.itag === 140 || s.itag === '140') || data.audioStreams[0];
-                        if (stream && stream.url) {
-                            resolved = true;
-                            controllers.forEach(c => c.abort());
-                            resolve(stream.url);
-                        }
+            fetch(pingUrl, { method: 'GET', signal: controller.signal })
+                .then(res => {
+                    if (res.ok && !resolved) {
+                        resolved = true;
+                        controllers.forEach(c => c.abort());
+                        resolve(`${base}/latest_version?id=${videoId}&itag=140&local=true`);
                     }
                 }).catch(() => {});
         });
@@ -271,8 +196,7 @@ async function getFastestStreamUrl(videoId) {
             if (!resolved) {
                 resolved = true;
                 controllers.forEach(c => c.abort());
-                const fallbackInv = window.INVIDIOUS[window.invIdx];
-                resolve(`${fallbackInv}/latest_version?id=${videoId}&itag=140&local=true`);
+                resolve(`${racers[0]}/latest_version?id=${videoId}&itag=140&local=true`);
             }
         }, 2500);
     });
@@ -306,8 +230,30 @@ const tryNextStream = async (videoId) => {
     });
 };
 
+let chromeErrorCount = 0;
+AUDIO.addEventListener('error', async () => {
+    if (window.AUDIO_ENGINE !== 'native') return;
+    chromeErrorCount++;
+    
+    // Prevent infinite loop freeze
+    if (chromeErrorCount >= 3) {
+        chromeErrorCount = 0;
+        window.playNextLogic();
+        return;
+    }
+    
+    if (window.OCTAVE.currentIndex >= 0) {
+        const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
+        const currentPos = AUDIO.currentTime || 0;
+        AUDIO.src = await getFastestStreamUrl(track.videoId);
+        AUDIO.currentTime = currentPos; 
+        AUDIO.play().catch(() => {});
+    }
+});
+
 AUDIO.addEventListener('playing', () => {
     if (window.AUDIO_ENGINE !== 'native') return;
+    chromeErrorCount = 0;
     window.OCTAVE.isPlaying = true;
     updatePlayIcons('fa-solid fa-pause');
     startProgressTracking();
@@ -329,18 +275,6 @@ AUDIO.addEventListener('ended', () => {
     if (window.AUDIO_ENGINE !== 'native') return;
     handleTrackEnded();
 });
-
-AUDIO.addEventListener('error', async () => {
-    if (window.AUDIO_ENGINE !== 'native') return;
-    if (window.OCTAVE.currentIndex >= 0) {
-        const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
-        const currentPos = AUDIO.currentTime;
-        AUDIO.src = await getFastestStreamUrl(track.videoId);
-        AUDIO.currentTime = currentPos; 
-        AUDIO.play().catch(() => {});
-    }
-});
-
 
 // ─── IFRAME ENGINE SETUP (BRAVE - UNTOUCHED) ──────────────────────────────────────────────
 let YTP = null;
@@ -403,7 +337,6 @@ window.playNextLogic = () => {
         window.OCTAVE.isPlaying = false;
         updatePlayIcons('fa-solid fa-play');
         clearInterval(progressTimer);
-        window.deactivatePiP();
     }
 };
 
@@ -433,13 +366,7 @@ window.togglePlay = () => {
         if (!YTP) return;
         window.OCTAVE.isPlaying ? YTP.pauseVideo() : YTP.playVideo();
     } else {
-        if (window.OCTAVE.isPlaying) {
-            AUDIO.pause();
-            window.deactivatePiP();
-        } else {
-            AUDIO.play().catch(() => {});
-            window.activatePiP();
-        }
+        window.OCTAVE.isPlaying ? AUDIO.pause() : AUDIO.play().catch(() => {});
     }
 };
 
@@ -567,14 +494,18 @@ window.playTrackByIndex = (index) => {
 
     updatePlayerUI(track);
     updateMediaSession(track);
-    updatePiPArtwork(track);
 
     if (window.AUDIO_ENGINE === 'iframe') {
         if (ytReady && YTP) YTP.loadVideoById({ videoId: track.videoId });
     } else {
-        AUDIO.pause();
-        tryNextStream(track.videoId);
-        window.activatePiP();
+        // BLESS AUDIO ELEMENT SYNCHRONOUSLY TO BEAT CHROME AUTOPLAY BLOCK
+        const SILENT_WAV = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+        if (!AUDIO.src || AUDIO.src === window.location.href) {
+            AUDIO.src = SILENT_WAV;
+        }
+        AUDIO.play().catch(()=>{});
+
+        tryNextStream(track.videoId); 
     }
 };
 
@@ -980,8 +911,6 @@ window.fetchFullArtistProfile = async (artist) => {
 
 document.addEventListener('DOMContentLoaded', () => {
     
-    initPiPKeepAlive();
-
     if (window.OCTAVE.currentIndex === -1 && window.OCTAVE.recentPlayed.length > 0) {
         window.OCTAVE.queue = [window.OCTAVE.recentPlayed[0]];
         window.OCTAVE.currentIndex = 0;
