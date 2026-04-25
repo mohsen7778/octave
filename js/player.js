@@ -1,6 +1,6 @@
 // ============================================================
 // player.js — Octave Hybrid Audio Engine
-// Upgraded for Chrome CORS bypass & Native Background Autoplay
+// Restored Dual Engine & Fixed Background Auto-Play
 // ============================================================
 
 window.escapeHTML = (str) => {
@@ -32,16 +32,17 @@ window.OCTAVE = {
 };
 
 // ─── HYBRID ENGINE ROUTER ──────────────────────────────────────────────────
-window.AUDIO_ENGINE = 'native'; // Force Native for all browsers to ensure background autoplay
+window.AUDIO_ENGINE = 'native'; // Default to native proxy for Chrome/Safari
 
 if (navigator.brave && navigator.brave.isBrave) {
     navigator.brave.isBrave().then(isBrave => {
         if (isBrave) {
-            // Brave requires Native Engine for unkillable screen-off background queue progression
-            window.AUDIO_ENGINE = 'native';
-            console.log("Octave: Brave detected. Forcing Native Engine for Background Autoplay.");
+            window.AUDIO_ENGINE = 'iframe';
+            console.log("Octave: Brave detected. Using Instant IFrame Engine.");
         }
     });
+} else {
+    console.log("Octave: Chrome/Safari detected. Using Native Proxy Engine.");
 }
 
 window.initTrackStats = (videoId) => {
@@ -144,7 +145,7 @@ fetch('https://api.invidious.io/instances.json?sort_by=health')
 
 window.invIdx = Math.floor(Math.random() * window.INVIDIOUS.length);
 
-// ─── BLAZING FAST NATIVE ENGINE ──────────────────────────────────────
+// ─── BLAZING FAST NATIVE ENGINE (CHROME/SAFARI) ──────────────────────────────────────
 const AUDIO = new Audio();
 AUDIO.preload = 'auto';
 
@@ -168,58 +169,27 @@ function unlockAudioForSafari() {
 document.addEventListener('click', unlockAudioForSafari, { once: true });
 document.addEventListener('touchstart', unlockAudioForSafari, { once: true });
 
-// 1. RACE THE SERVERS (Chrome CORS Bypass Update)
-async function getFastestStreamUrl(videoId) {
-    return new Promise((resolve) => {
-        const controllers =[];
-        let resolved = false;
-
-        const racers = [...window.INVIDIOUS].sort(() => 0.5 - Math.random()).slice(0, 4);
-        
-        racers.forEach(base => {
-            const controller = new AbortController();
-            controllers.push(controller);
-            // Pinging the API directly avoids the Chrome CORS block that was crashing your playback
-            const pingUrl = `${base}/api/v1/videos/${videoId}?fields=videoId`;
-            
-            fetch(pingUrl, { method: 'GET', signal: controller.signal })
-                .then(res => {
-                    if (res.ok && !resolved) {
-                        resolved = true;
-                        controllers.forEach(c => c.abort());
-                        resolve(`${base}/latest_version?id=${videoId}&itag=140&local=true`);
-                    }
-                }).catch(() => {});
-        });
-
-        setTimeout(() => {
-            if (!resolved) {
-                resolved = true;
-                controllers.forEach(c => c.abort());
-                resolve(`${racers[0]}/latest_version?id=${videoId}&itag=140&local=true`);
-            }
-        }, 2500);
-    });
+// Chrome CORS Fix: Let the native HTML5 audio element load it directly without JS Fetch racing
+function getStreamUrl(videoId) {
+    const base = window.INVIDIOUS[window.invIdx];
+    return `${base}/latest_version?id=${videoId}&itag=140&local=true`;
 }
 
-// 2. GHOST PRE-BUFFERING
 function preloadNextTrackInQueue() {
     if (window.AUDIO_ENGINE !== 'native' || window.OCTAVE.currentIndex < 0) return;
     const nextIdx = window.OCTAVE.currentIndex + 1;
     if (nextIdx < window.OCTAVE.queue.length) {
         const nextId = window.OCTAVE.queue[nextIdx].videoId;
-        getFastestStreamUrl(nextId).then(fastUrl => {
-            PRELOAD_AUDIO.src = fastUrl;
-            PRELOAD_AUDIO.load(); 
-        });
+        PRELOAD_AUDIO.src = getStreamUrl(nextId);
+        PRELOAD_AUDIO.load(); 
     }
 }
 
-const tryNextStream = async (videoId) => {
+const tryNextStream = (videoId) => {
     if (PRELOAD_AUDIO.src && PRELOAD_AUDIO.src.includes(videoId)) {
         AUDIO.src = PRELOAD_AUDIO.src;
     } else {
-        AUDIO.src = await getFastestStreamUrl(videoId);
+        AUDIO.src = getStreamUrl(videoId);
     }
     
     AUDIO.load();
@@ -247,18 +217,22 @@ AUDIO.addEventListener('ended', () => {
     handleTrackEnded();
 });
 
-AUDIO.addEventListener('error', async () => {
+AUDIO.addEventListener('error', () => {
     if (window.AUDIO_ENGINE !== 'native') return;
+    // If the active server fails or is blocked, instantly rotate to the next one and resume
+    window.invIdx = (window.invIdx + 1) % window.INVIDIOUS.length;
     if (window.OCTAVE.currentIndex >= 0) {
         const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
-        const currentPos = AUDIO.currentTime;
-        AUDIO.src = await getFastestStreamUrl(track.videoId);
-        AUDIO.currentTime = currentPos; 
+        const currentPos = AUDIO.currentTime || 0;
+        AUDIO.src = getStreamUrl(track.videoId);
+        AUDIO.currentTime = currentPos;
+        AUDIO.load();
         AUDIO.play().catch(() => {});
     }
 });
 
-// ─── IFRAME ENGINE (KEPT FOR FALLBACK) ──────────────────────────────────────────────
+
+// ─── IFRAME ENGINE SETUP (BRAVE) ──────────────────────────────────────────────
 let YTP = null;
 let ytReady = false;
 
@@ -310,16 +284,13 @@ function onYTS(e) {
 let progressTimer = null;
 let sleepTimerId = null;
 
-// AUTOPLAY QUEUE PROGRESSION LOGIC
+// AUTOPLAY QUEUE PROGRESSION LOGIC (Fix for Brave stopping after 1 track)
 window.playNextLogic = () => {
     if (window.OCTAVE.currentIndex >= 0 && window.OCTAVE.currentIndex < window.OCTAVE.queue.length - 1) {
-        // Play the next track in the queue
         window.playTrackByIndex(window.OCTAVE.currentIndex + 1);
     } else if (window.generateDiscoverMix) {
-        // If queue is done, trigger Auto-DJ if available
         window.generateDiscoverMix(); 
     } else {
-        // Queue empty
         window.OCTAVE.isPlaying = false;
         updatePlayIcons('fa-solid fa-play');
         clearInterval(progressTimer);
@@ -335,8 +306,8 @@ function handleTrackEnded() {
         window.OCTAVE.playStats[track.videoId].completes++;
         window.saveCache();
     }
-    // Fires the auto-play queue progression
-    window.playNextLogic();
+    // Triggers the next song automatically for both Brave and Chrome
+    if (window.playNextLogic) window.playNextLogic();
 }
 
 function updatePlayIcons(iconClass) {
@@ -904,10 +875,8 @@ document.addEventListener('DOMContentLoaded', () => {
         updateMediaSession(track); 
         
         if (window.AUDIO_ENGINE === 'native') {
-            getFastestStreamUrl(track.videoId).then(url => {
-                AUDIO.src = url;
-                AUDIO.load();
-            });
+            AUDIO.src = getStreamUrl(track.videoId);
+            AUDIO.load();
         }
     }
 
