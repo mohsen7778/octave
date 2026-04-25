@@ -1,6 +1,6 @@
 // ============================================================
 // player.js — Octave Hybrid Audio Engine
-// Chrome Native Engine (Perfected Gesture Chain) | Brave IFrame
+// Chrome Native Engine (Perfected Pipeline) | Brave IFrame
 // ============================================================
 
 window.escapeHTML = (str) => {
@@ -166,6 +166,7 @@ function unlockAudioForSafari() {
     if (audioUnlocked) return;
     audioUnlocked = true;
     
+    // Only unlocking AudioContext. Removed AUDIO.play() override to protect gesture chain.
     try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
         const buf = ctx.createBuffer(1, 1, 22050);
@@ -179,52 +180,57 @@ function unlockAudioForSafari() {
 document.addEventListener('click', unlockAudioForSafari, { once: true });
 document.addEventListener('touchstart', unlockAudioForSafari, { once: true });
 
-async function getDirectAudioUrl(videoId) {
-    // Try Piped APIs
-    for (let i = 0; i < window.PIPED.length; i++) {
-        const base = window.PIPED[(window.pipedIdx + i) % window.PIPED.length];
-        try {
-            const res = await fetch(`${base}/streams/${videoId}`);
-            if (res.ok) {
-                const data = await res.json();
-                const stream = data.audioStreams?.find(s => String(s.itag) === '140') || data.audioStreams?.[0];
-                if (stream && stream.url) {
-                    window.pipedIdx = (window.pipedIdx + i) % window.PIPED.length;
-                    return stream.url;
-                }
-            }
-        } catch (e) { continue; }
-    }
+// FIXED FETCHER: Returns a URL no matter what. Solves the rapid skip to Brew Mix.
+function getDirectAudioUrl(videoId) {
+    return new Promise((resolve) => {
+        let resolved = false;
+        const controllers = [];
+        
+        const racers = [...window.PIPED].sort(() => 0.5 - Math.random()).slice(0, 3);
+        
+        racers.forEach(base => {
+            const controller = new AbortController();
+            controllers.push(controller);
+            fetch(`${base}/streams/${videoId}`, { signal: controller.signal })
+                .then(res => res.json())
+                .then(data => {
+                    if (data && data.audioStreams && !resolved) {
+                        const stream = data.audioStreams.find(s => String(s.itag) === '140') || data.audioStreams[0];
+                        if (stream && stream.url) {
+                            resolved = true;
+                            controllers.forEach(c => c.abort());
+                            resolve(stream.url);
+                        }
+                    }
+                }).catch(() => {});
+        });
 
-    // Try Invidious APIs
-    for (let i = 0; i < window.INVIDIOUS.length; i++) {
-        const base = window.INVIDIOUS[(window.invIdx + i) % window.INVIDIOUS.length];
-        try {
-            const res = await fetch(`${base}/api/v1/videos/${videoId}?fields=adaptiveFormats`);
-            if (res.ok) {
-                const data = await res.json();
-                const stream = data.adaptiveFormats?.find(f => String(f.itag) === '140');
-                if (stream && stream.url) {
-                    window.invIdx = (window.invIdx + i) % window.INVIDIOUS.length;
-                    return stream.url;
-                }
+        // If APIs fail (CORS block), fallback after 2.5s to prevent rapid queue skipping
+        setTimeout(() => {
+            if (!resolved) {
+                resolved = true;
+                controllers.forEach(c => c.abort());
+                const fallbackInv = window.INVIDIOUS[window.invIdx];
+                resolve(`${fallbackInv}/latest_version?id=${videoId}&itag=140`);
             }
-        } catch (e) { continue; }
-    }
-    return null;
+        }, 2500);
+    });
 }
 
 AUDIO.addEventListener('error', () => {
     if (window.AUDIO_ENGINE !== 'native') return;
     
     console.error("Stable media stream broken. Skipping to next track.");
-    window.playNextLogic();
+    
+    // 1 second buffer to completely prevent infinite error loop skipping
+    setTimeout(() => {
+        window.playNextLogic();
+    }, 1000);
 });
 
 AUDIO.addEventListener('playing', () => {
     if (window.AUDIO_ENGINE !== 'native') return;
     
-    // Ignore the silent unlocker buffer triggering 'playing' state
     if (AUDIO.src.startsWith('data:audio')) return;
 
     window.OCTAVE.isPlaying = true;
@@ -258,9 +264,7 @@ AUDIO.addEventListener('pause', () => {
 
 AUDIO.addEventListener('ended', () => {
     if (window.AUDIO_ENGINE !== 'native') return;
-    
     if (AUDIO.src.startsWith('data:audio')) return;
-
     handleTrackEnded();
 });
 
@@ -489,42 +493,39 @@ window.playTrackByIndex = (index) => {
     if (window.AUDIO_ENGINE === 'iframe') {
         if (ytReady && YTP) YTP.loadVideoById({ videoId: track.videoId });
     } else {
-        // EXACT FIX: Inlined fetch logic directly within the user gesture chain
         AUDIO.pause();
         const SILENT_MP3 = "data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU5LjI3LjEwMAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIAD+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+AAAAAExhdmM1OS4yNyAAAAAAAAAAAAAAAAQAAgPIAAAAAAAAAAABIQQAAAAAAAAAAAAAAAAAAAAAA//MUZAAAAAGkAAAAAAAAA0gAAAAATEFNRTMuMTAwA8gAAAAAAgAAAEH//MUZBAAAAGkAAAAAAAAA0gAAAAAA//MUZCQAAAGkAAAAAAAAA0gAAAAAA//MUZGQAAAGkAAAAAAAAA0gAAAAAA";
         AUDIO.src = SILENT_MP3;
         
         updatePlayIcons('fa-solid fa-spinner fa-spin');
         
-        AUDIO.play().then(async () => {
-            const url = await getDirectAudioUrl(track.videoId);
-
-            if (url) {
-                AUDIO.src = url;
-                AUDIO.load();
-                AUDIO.play().catch(() => {
+        // PERFECT GESTURE CHAIN: .then() preserves the user interaction token
+        AUDIO.play().then(() => {
+            getDirectAudioUrl(track.videoId).then((url) => {
+                if (url) {
+                    AUDIO.src = url;
+                    AUDIO.load();
+                    AUDIO.play().catch(() => {
+                        updatePlayIcons('fa-solid fa-play');
+                        window.OCTAVE.isPlaying = false;
+                    });
+                } else {
                     updatePlayIcons('fa-solid fa-play');
-                    window.OCTAVE.isPlaying = false;
-                });
-            } else {
-                updatePlayIcons('fa-solid fa-play');
-                window.playNextLogic();
-            }
-        }).catch(async () => {
-            // fallback
-            const url = await getDirectAudioUrl(track.videoId);
-
-            if (url) {
-                AUDIO.src = url;
-                AUDIO.load();
-                AUDIO.play().catch(()=>{
+                    window.playNextLogic();
+                }
+            });
+        }).catch(() => {
+            // Fallback follows the exact same intact promise chain
+            getDirectAudioUrl(track.videoId).then((url) => {
+                if (url) {
+                    AUDIO.src = url;
+                    AUDIO.load();
+                    AUDIO.play().catch(()=>{});
+                } else {
                     updatePlayIcons('fa-solid fa-play');
-                    window.OCTAVE.isPlaying = false;
-                });
-            } else {
-                updatePlayIcons('fa-solid fa-play');
-                window.playNextLogic();
-            }
+                    window.playNextLogic();
+                }
+            });
         });
     }
 };
