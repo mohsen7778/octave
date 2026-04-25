@@ -1,8 +1,7 @@
 // ============================================================
-// app.js — Octave Full Flagship Engine (UNSTRIPPED + AI TASTE MATCHING FIXED)
+// app.js — Octave Full Flagship Engine (UNSTRIPPED + EVENT FIXES)
 // ============================================================
 
-// --- PWA INSTALL LOGIC ---
 let deferredInstallPrompt;
 
 window.addEventListener('beforeinstallprompt', (e) => {
@@ -19,7 +18,6 @@ window.addEventListener('beforeinstallprompt', (e) => {
 
 document.addEventListener('DOMContentLoaded', () => {
     
-    // --- SHARED TRACK BOOT SEQUENCE ---
     const params = new URLSearchParams(window.location.search);
     const shareV = params.get('v');
     if (shareV) {
@@ -42,7 +40,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 1000);
     }
 
-    // --- PWA INSTALL BUTTON BINDINGS ---
     document.getElementById('close-install')?.addEventListener('click', () => {
         document.getElementById('install-modal').classList.remove('active');
         localStorage.setItem('installPromptDismissed', 'true');
@@ -55,12 +52,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (deferredInstallPrompt) {
             deferredInstallPrompt.prompt();
             const { outcome } = await deferredInstallPrompt.userChoice;
-            console.log(`User response to the install prompt: ${outcome}`);
             deferredInstallPrompt = null;
         }
     });
 
-    // --- SPLASH SCREEN FADE ---
     setTimeout(() => {
         const splash = document.getElementById('splash-screen');
         if (splash) {
@@ -136,7 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
     handleBravePrompt();
     window.renderHome();
 
-    // --- STATIC MODAL BUTTON BINDINGS (Bound only once!) ---
+    // Bound only once at startup
     document.getElementById('close-playlist')?.addEventListener('click', () => document.getElementById('playlist-modal').classList.remove('active'));
     document.getElementById('save-playlist')?.addEventListener('click', () => {
         const name = document.getElementById('playlist-name').value.trim();
@@ -166,7 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// --- GLOBAL EVENT DELEGATION ---
+// --- GLOBAL EVENT DELEGATION (Fixes the "Only works once" bug forever!) ---
 document.body.addEventListener('click', async (e) => {
     if (e.target.closest('#menu-btn')) {
         document.getElementById('side-menu').classList.add('active');
@@ -176,16 +171,22 @@ document.body.addEventListener('click', async (e) => {
         document.getElementById('side-menu').classList.remove('active');
         document.getElementById('menu-backdrop').classList.remove('active');
     }
-    
     if (e.target.closest('#open-yt-import')) {
         document.getElementById('yt-import-modal').classList.add('active');
     }
     if (e.target.closest('#open-create-playlist')) {
         document.getElementById('playlist-modal').classList.add('active');
     }
-    
     if (e.target.closest('#open-ai-mix') || e.target.closest('#open-ai-mix-large')) {
         document.getElementById('ai-mix-modal').classList.add('active');
+    }
+    
+    // NEW: Global binders for Auto-DJ and Liked Songs
+    if (e.target.closest('#open-discover-mix')) {
+        if (window.generateDiscoverMix) window.generateDiscoverMix();
+    }
+    if (e.target.closest('#open-liked-songs')) {
+        if (window.renderLikedSongs) window.renderLikedSongs();
     }
 
     const pageBtn = e.target.closest('[data-page]');
@@ -215,7 +216,7 @@ document.body.addEventListener('click', async (e) => {
 });
 
 
-// --- AI MIX ENGINE (WITH STRICT FIREWALL & MUSIC ENFORCEMENT) ---
+// --- AI MIX ENGINE (POST METHOD FIX FOR LARGE PROMPTS) ---
 async function generateAiMix() {
     const promptInput = document.getElementById('ai-prompt').value.trim();
     const lang = document.getElementById('ai-lang').value;
@@ -234,13 +235,11 @@ async function generateAiMix() {
             const topScored = uniqueTracks.sort((a, b) => window.calculateTrackScore(b) - window.calculateTrackScore(a)).slice(0, 5);
             
             if (topScored.length > 0) {
-                // Strip all special chars, limit length, prevent HTML injection from weird history
                 const cleanNames = topScored.map(t => `${t.title.replace(/[^a-zA-Z0-9 ]/g, '').substring(0, 30)} by ${t.author.replace(/[^a-zA-Z0-9 ]/g, '')}`).join(", ");
-                tasteContext = `\nContext: The user recently played: [${cleanNames}]. If these are actual songs, use them to gauge their taste. IF THEY ARE TUTORIALS, NEWS, PODCASTS, OR YOUTUBE VIDEOS, COMPLETELY IGNORE THEM.\n`;
+                tasteContext = `\nContext: The user recently played:[${cleanNames}]. If these are actual songs, use them to gauge their taste. IF THEY ARE TUTORIALS, NEWS, PODCASTS, OR YOUTUBE VIDEOS, COMPLETELY IGNORE THEM.\n`;
             }
         }
 
-        // Extremely strict firewall prompt
         const systemPrompt = `You are an elite music curator API. 
 Task: Recommend exactly 15 highly melodic MUSIC TRACKS based on the vibe: "${promptInput}". 
 Language: ${lang}. ${tasteContext}
@@ -250,10 +249,16 @@ CRITICAL RULES:
 2. Recommend ONLY actual music tracks (songs). NEVER recommend tutorials, news, podcasts, HTML coding, or conversational videos.
 3. Do NOT include numbers, quotes, bullet points, HTML tags, or any other text.`;
         
-        const response = await fetch(`https://text.pollinations.ai/${encodeURIComponent(systemPrompt)}`);
+        // FIXED: Using POST so long history texts don't break the URL limits!
+        const response = await fetch(`https://text.pollinations.ai/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                messages:[{ role: 'system', content: systemPrompt }]
+            })
+        });
         const text = await response.text();
 
-        // Firewall the parsing: Strip HTML tags, weird characters, and ignore obviously non-music lines
         const lines = text.split('\n')
             .map(l => l.replace(/^[\d\.\)\-*]+\s*/, '').replace(/["'*_<>]/g, '').trim()) 
             .filter(l => l.match(/[-–—]/) && l.length < 80 && !l.toLowerCase().includes('tutorial') && !l.toLowerCase().includes('html'));
@@ -261,7 +266,6 @@ CRITICAL RULES:
         if (lines.length === 0) throw new Error("Format invalid. Please try a different prompt.");
 
         const playableTracks =[];
-        
         for (const line of lines.slice(0, 15)) {
             const parts = line.split(/[-–—]/);
             if(parts.length < 2) continue;
@@ -270,11 +274,8 @@ CRITICAL RULES:
             const artist = parts[1].trim();
             if(!title || !artist) continue;
 
-            // Forced "song audio" appended to search to guarantee we don't fetch vlogs
             const results = await window.performSearch(`${title} ${artist} song audio`);
-            if (results && results.length > 0) {
-                playableTracks.push(results[0]);
-            }
+            if (results && results.length > 0) playableTracks.push(results[0]);
         }
 
         if (playableTracks.length === 0) throw new Error("Tracks not found. Try a different vibe.");
@@ -328,7 +329,6 @@ document.getElementById('import-vault-btn').addEventListener('click', () => {
 });
 document.getElementById('import-vault-input').addEventListener('change', window.importVault);
 
-// --- LYRICS & FONTS ---
 const fpPanel = document.getElementById('fp-overlay-panel');
 const fpContent = document.getElementById('fp-overlay-content');
 const fpTitle = document.getElementById('fp-overlay-title');
@@ -394,7 +394,6 @@ window.setLyricsFont = (fontCss, el) => {
     }
 };
 
-// --- ARTIST PAGES ---
 window.renderArtistPage = async (artistName) => {
     document.getElementById('full-player').classList.remove('active');
     document.getElementById('fp-overlay-panel').classList.remove('active');
@@ -441,7 +440,7 @@ window.renderArtistPage = async (artistName) => {
     if (profile.tracks.length > 0) {
         document.querySelectorAll('.artist-track-item').forEach((node, idx) => {
             node.addEventListener('click', () => {
-                window.OCTAVE.queue = [...profile.tracks];
+                window.OCTAVE.queue =[...profile.tracks];
                 window.playTrackByIndex(idx);
             });
         });
@@ -490,7 +489,6 @@ if (document.getElementById('fp-options')) {
     });
 }
 
-// --- CORE RENDERERS ---
 window.renderPlaylistDetail = (plName) => {
     const dynamicView = document.getElementById('dynamic-view');
     const tracks = window.OCTAVE.playlists[plName] ||[];
@@ -612,12 +610,6 @@ window.renderHome = () => {
             <div class="list-info"><div class="list-title">Liked Songs</div><div class="list-subtitle">${likedCount} tracks saved</div></div>
         </div>
     `;
-
-    document.getElementById('open-discover-mix').addEventListener('click', () => {
-        if (window.generateDiscoverMix) window.generateDiscoverMix();
-    });
-    
-    document.getElementById('open-liked-songs').addEventListener('click', window.renderLikedSongs);
 
     Object.keys(window.OCTAVE.playlists).reverse().forEach(plName => {
         const el = document.createElement('div');
@@ -785,7 +777,6 @@ document.getElementById('opt-add-playlist')?.addEventListener('click', () => {
     plModal.classList.add('active');
 });
 
-// --- YOUTUBE IMPORT ---
 document.getElementById('start-yt-import')?.addEventListener('click', async () => {
     const urlInput = document.getElementById('yt-playlist-url').value.trim();
     if (!urlInput) return;
