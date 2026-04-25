@@ -1,7 +1,6 @@
 // ============================================================
 // player.js — Octave Hybrid Audio Engine
-// Detects Brave Browser for instant IFrame playback.
-// Falls back to Blazing Fast Native <audio> Engine for Chrome/Safari.
+// Brave stays on IFrame. Chrome/Safari on Ultra-Stable Native.
 // ============================================================
 
 window.escapeHTML = (str) => {
@@ -134,6 +133,13 @@ window.INVIDIOUS =[
     'https://invidious.lunar.icu'
 ];
 
+window.PIPED_INSTANCES = [
+    'https://pipedapi.kavin.rocks',
+    'https://pipedapi.tokhmi.xyz',
+    'https://api.piped.projectsegfau.lt',
+    'https://piped-api.lunar.icu'
+];
+
 fetch('https://api.invidious.io/instances.json?sort_by=health')
     .then(res => res.json())
     .then(data => {
@@ -145,18 +151,24 @@ fetch('https://api.invidious.io/instances.json?sort_by=health')
     .catch(() => console.warn('Using fallback instances'));
 
 window.invIdx = Math.floor(Math.random() * window.INVIDIOUS.length);
+window.pipedIdx = Math.floor(Math.random() * window.PIPED_INSTANCES.length);
 
 // ─── BLAZING FAST NATIVE ENGINE (CHROME/SAFARI) ──────────────────────────────────────
 const AUDIO = new Audio();
 AUDIO.preload = 'auto';
 
-const PRELOAD_AUDIO = new Audio(); // Ghost audio element to secretly buffer the next song
+const PRELOAD_AUDIO = new Audio(); 
 PRELOAD_AUDIO.preload = 'auto';
+let preloadedVideoId = null;
 
 let audioUnlocked = false;
-function unlockAudioForSafari() {
+function unlockAudioEngine() {
     if (audioUnlocked) return;
     audioUnlocked = true;
+    
+    // Unlocks Chrome Autoplay by firing a silent play immediately
+    AUDIO.play().then(() => { AUDIO.pause(); }).catch(() => {});
+    
     try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
         const buf = ctx.createBuffer(1, 1, 22050);
@@ -167,33 +179,37 @@ function unlockAudioForSafari() {
         ctx.resume().catch(() => {});
     } catch (e) {}
 }
-document.addEventListener('click', unlockAudioForSafari, { once: true });
-document.addEventListener('touchstart', unlockAudioForSafari, { once: true });
+document.addEventListener('click', unlockAudioEngine, { once: true });
+document.addEventListener('touchstart', unlockAudioEngine, { once: true });
 
-// 1. DIRECT CDN FETCHER: Uses Piped API for direct Google audio streams
-async function getFastestStreamUrl(videoId) {
-    try {
-        // Try Piped API first (Modern, extremely stable)
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch(`https://pipedapi.kavin.rocks/streams/${videoId}`, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        
-        if (res.ok) {
-            const data = await res.json();
-            const audioStream = data.audioStreams.find(s => s.itag === 140) || data.audioStreams[0];
-            if (audioStream && audioStream.url) {
-                return audioStream.url;
+// Chrome: Fetch Direct Stream URL from Piped & Invidious
+async function fetchDirectStreamUrl(videoId) {
+    // 1. Race Piped API (Most reliable for direct Google CDN)
+    for (let i = 0; i < window.PIPED_INSTANCES.length; i++) {
+        const base = window.PIPED_INSTANCES[(window.pipedIdx + i) % window.PIPED_INSTANCES.length];
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3500);
+            const res = await fetch(`${base}/streams/${videoId}`, { signal: controller.signal });
+            clearTimeout(timeoutId);
+            
+            if (res.ok) {
+                const data = await res.json();
+                const audioStream = data.audioStreams.find(s => s.itag === 140 || s.itag === '140') || data.audioStreams[0];
+                if (audioStream && audioStream.url) {
+                    window.pipedIdx = (window.pipedIdx + i) % window.PIPED_INSTANCES.length;
+                    return audioStream.url;
+                }
             }
-        }
-    } catch (e) {}
+        } catch (e) { continue; }
+    }
 
-    // Fallback to direct Invidious API
+    // 2. Fallback to Invidious API
     for (let i = 0; i < window.INVIDIOUS.length; i++) {
         const base = window.INVIDIOUS[(window.invIdx + i) % window.INVIDIOUS.length];
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 2500);
+            const timeoutId = setTimeout(() => controller.abort(), 3500);
             const res = await fetch(`${base}/api/v1/videos/${videoId}?fields=adaptiveFormats`, { signal: controller.signal });
             clearTimeout(timeoutId);
             
@@ -205,56 +221,98 @@ async function getFastestStreamUrl(videoId) {
                     return audioStream.url;
                 }
             }
-        } catch (e) {
-            continue;
-        }
+        } catch (e) { continue; }
     }
 
-    // Absolute last resort
-    return `${window.INVIDIOUS[window.invIdx]}/latest_version?id=${videoId}&itag=140&local=true`;
+    return null; // Return null to trigger the 3-strike skip logic
 }
 
-// 2. GHOST PRE-BUFFERING: Downloads the next track into the browser's memory cache
-function preloadNextTrackInQueue() {
+async function preloadNextTrackInQueue() {
     if (window.AUDIO_ENGINE !== 'native' || window.OCTAVE.currentIndex < 0) return;
     const nextIdx = window.OCTAVE.currentIndex + 1;
     if (nextIdx < window.OCTAVE.queue.length) {
         const nextId = window.OCTAVE.queue[nextIdx].videoId;
-        getFastestStreamUrl(nextId).then(fastUrl => {
-            PRELOAD_AUDIO.src = fastUrl;
-            PRELOAD_AUDIO.load(); // Downloads silently in the background!
-        });
+        const url = await fetchDirectStreamUrl(nextId);
+        if (url) {
+            PRELOAD_AUDIO.src = url;
+            preloadedVideoId = nextId;
+            PRELOAD_AUDIO.load(); 
+        }
     }
 }
 
 const tryNextStream = async (videoId) => {
-    // If we already secretly preloaded this specific song, use the cached URL instantly!
-    if (PRELOAD_AUDIO.src && PRELOAD_AUDIO.src.includes(videoId)) {
+    // Show spinner immediately so Chrome users know it's actually fetching
+    updatePlayIcons('fa-solid fa-spinner fa-spin');
+    
+    if (preloadedVideoId === videoId && PRELOAD_AUDIO.src) {
         AUDIO.src = PRELOAD_AUDIO.src;
     } else {
-        // Otherwise, fetch the fast stream URL
-        AUDIO.src = await getFastestStreamUrl(videoId);
+        const url = await fetchDirectStreamUrl(videoId);
+        if (url) {
+            AUDIO.src = url;
+        } else {
+            console.warn("Track completely unavailable across all APIs. Skipping...");
+            window.playNextLogic();
+            return;
+        }
     }
     
     AUDIO.load();
-    AUDIO.play().catch(() => {});
+    AUDIO.play().catch(() => {
+        updatePlayIcons('fa-solid fa-play');
+        window.OCTAVE.isPlaying = false;
+    });
 };
+
+let chromeErrorCount = 0;
+AUDIO.addEventListener('error', async () => {
+    if (window.AUDIO_ENGINE !== 'native') return;
+    chromeErrorCount++;
+    
+    // The 3-Strike Rule: Prevents the infinite freeze loop
+    if (chromeErrorCount >= 3) {
+        console.warn("Audio stream failed 3 times. Skipping track automatically.");
+        chromeErrorCount = 0;
+        window.playNextLogic();
+        return;
+    }
+
+    if (window.OCTAVE.currentIndex >= 0) {
+        const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
+        const currentPos = AUDIO.currentTime || 0;
+        const newUrl = await fetchDirectStreamUrl(track.videoId);
+        
+        if (newUrl) {
+            AUDIO.src = newUrl;
+            AUDIO.currentTime = currentPos;
+            AUDIO.load();
+            AUDIO.play().catch(() => {});
+        } else {
+            chromeErrorCount = 0;
+            window.playNextLogic();
+        }
+    }
+});
 
 AUDIO.addEventListener('playing', () => {
     if (window.AUDIO_ENGINE !== 'native') return;
+    chromeErrorCount = 0; // Reset strikes on success
     window.OCTAVE.isPlaying = true;
     updatePlayIcons('fa-solid fa-pause');
     startProgressTracking();
     syncMediaSessionPosition();
-    
-    // The moment the current song starts, secretly download the next one!
     preloadNextTrackInQueue();
 });
 
 AUDIO.addEventListener('pause', () => {
     if (window.AUDIO_ENGINE !== 'native') return;
     window.OCTAVE.isPlaying = false;
-    updatePlayIcons('fa-solid fa-play');
+    // Don't override the spinner if it's currently fetching
+    const fpIcon = document.querySelector('#fp-play i');
+    if (fpIcon && !fpIcon.classList.contains('fa-spinner')) {
+        updatePlayIcons('fa-solid fa-play');
+    }
     clearInterval(progressTimer);
 });
 
@@ -263,20 +321,7 @@ AUDIO.addEventListener('ended', () => {
     handleTrackEnded();
 });
 
-AUDIO.addEventListener('error', async () => {
-    if (window.AUDIO_ENGINE !== 'native') return;
-    // If a server randomly dies mid-song, immediately grab a new fast server and resume
-    if (window.OCTAVE.currentIndex >= 0) {
-        const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
-        const currentPos = AUDIO.currentTime;
-        AUDIO.src = await getFastestStreamUrl(track.videoId);
-        AUDIO.currentTime = currentPos; // Resume exactly where it died
-        AUDIO.play().catch(() => {});
-    }
-});
-
-
-// ─── IFRAME ENGINE SETUP (BRAVE) ──────────────────────────────────────────────
+// ─── IFRAME ENGINE SETUP (BRAVE - 100% UNTOUCHED) ─────────────────────────────
 let YTP = null;
 let ytReady = false;
 
@@ -339,6 +384,19 @@ function handleTrackEnded() {
     }
     if (window.playNextLogic) window.playNextLogic();
 }
+
+// Fixed PlayNextLogic so both browsers progress properly
+window.playNextLogic = () => {
+    if (window.OCTAVE.currentIndex >= 0 && window.OCTAVE.currentIndex < window.OCTAVE.queue.length - 1) {
+        window.playTrackByIndex(window.OCTAVE.currentIndex + 1);
+    } else if (window.generateDiscoverMix) {
+        window.generateDiscoverMix(); 
+    } else {
+        window.OCTAVE.isPlaying = false;
+        updatePlayIcons('fa-solid fa-play');
+        clearInterval(progressTimer);
+    }
+};
 
 function updatePlayIcons(iconClass) {
     const mini = document.querySelector('.play-btn-mini i');
@@ -413,7 +471,7 @@ function updateMediaSession(track) {
 
     navigator.mediaSession.setActionHandler('play', () => { window.togglePlay(); });
     navigator.mediaSession.setActionHandler('pause', () => { window.togglePlay(); });
-    navigator.mediaSession.setActionHandler('nexttrack', () => { document.getElementById('fp-next')?.click(); });
+    navigator.mediaSession.setActionHandler('nexttrack', () => { window.playNextLogic(); });
     navigator.mediaSession.setActionHandler('previoustrack', () => { window.playPrev(); });
 
     try {
@@ -487,7 +545,7 @@ window.playTrackByIndex = (index) => {
         if (ytReady && YTP) YTP.loadVideoById({ videoId: track.videoId });
     } else {
         AUDIO.pause();
-        tryNextStream(track.videoId); // Starts the fast stream system
+        tryNextStream(track.videoId); 
     }
 };
 
@@ -905,9 +963,11 @@ document.addEventListener('DOMContentLoaded', () => {
         updateMediaSession(track); 
         
         if (window.AUDIO_ENGINE === 'native') {
-            getFastestStreamUrl(track.videoId).then(url => {
-                AUDIO.src = url;
-                AUDIO.load();
+            fetchDirectStreamUrl(track.videoId).then(url => {
+                if (url) {
+                    AUDIO.src = url;
+                    AUDIO.load();
+                }
             });
         }
     }
