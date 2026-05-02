@@ -1,6 +1,6 @@
 // ============================================================
 // player.js Octave Hybrid Audio Engine
-// Stable Engine Router for Chrome Native Playback
+// Stable Chrome Native Fix + Untouched Brave IFrame Engine
 // ============================================================
 
 window.escapeHTML = (str) => {
@@ -29,20 +29,24 @@ window.OCTAVE = {
     isNextTrackManual: true, 
     activeTrackViewed: false,
     isDraggingProgress: false,
-    isTransitioning: false
+    isTransitioning: false,
+    nextTrackPreloaded: false
 };
 
+//  HYBRID ENGINE ROUTER 
 window.AUDIO_ENGINE = 'native'; 
+let activeEngine = 'native';
 
 if (navigator.brave && navigator.brave.isBrave) {
     navigator.brave.isBrave().then(isBrave => {
         if (isBrave) {
             window.AUDIO_ENGINE = 'iframe';
+            activeEngine = 'iframe';
             console.log("Octave Brave detected. Using Instant IFrame Engine.");
         }
     });
 } else {
-    console.log("Octave Chrome Safari detected. Using Native Engine.");
+    console.log("Octave Chrome Safari detected. Using Stable Native Engine.");
 }
 
 window.initTrackStats = (videoId) => {
@@ -124,6 +128,7 @@ window.importVault = (event) => {
     reader.readAsText(file);
 };
 
+//  API INSTANCES 
 window.PIPED = [
     'https://pipedapi.kavin.rocks',
     'https://pipedapi.smnz.de',
@@ -153,6 +158,7 @@ fetch('https://api.invidious.io/instances.json?sort_by=health')
 window.invIdx = Math.floor(Math.random() * window.INVIDIOUS.length);
 window.pipedIdx = Math.floor(Math.random() * window.PIPED.length);
 
+//  STABLE NATIVE ENGINE FOR CHROME 
 const AUDIO = new Audio();
 AUDIO.preload = 'auto';
 AUDIO.setAttribute("playsinline", "true");
@@ -176,23 +182,42 @@ function unlockAudioForSafari() {
 document.addEventListener('click', unlockAudioForSafari, { once: true });
 document.addEventListener('touchstart', unlockAudioForSafari, { once: true });
 
+// FAST RACER Prevents infinite buffering by capping fetch time to exactly 3 seconds
 async function getDirectAudioUrl(videoId) {
-    for (let i = 0; i < window.PIPED.length; i++) {
-        const base = window.PIPED[(window.pipedIdx + i) % window.PIPED.length];
-        try {
-            const res = await fetch(`${base}/streams/${videoId}`);
-            if (res.ok) {
-                const data = await res.json();
-                const stream = data.audioStreams?.find(s => String(s.itag) === '140') || data.audioStreams?.[0];
-                if (stream && stream.url) {
-                    window.pipedIdx = (window.pipedIdx + i) % window.PIPED.length;
-                    return stream.url;
-                }
+    return new Promise((resolve) => {
+        let isResolved = false;
+        const controllers = [];
+        
+        const fallbackTimer = setTimeout(() => {
+            if (!isResolved) {
+                isResolved = true;
+                controllers.forEach(c => c.abort());
+                const fallbackInv = window.INVIDIOUS[window.invIdx];
+                resolve(`${fallbackInv}/latest_version?id=${videoId}&itag=140`);
             }
-        } catch (e) { continue; }
-    }
-    const fallbackInv = window.INVIDIOUS[window.invIdx];
-    return `${fallbackInv}/latest_version?id=${videoId}&itag=140`;
+        }, 3000);
+
+        const racers = [...window.PIPED].sort(() => 0.5 - Math.random()).slice(0, 3);
+        
+        racers.forEach(base => {
+            const controller = new AbortController();
+            controllers.push(controller);
+            fetch(`${base}/streams/${videoId}`, { signal: controller.signal })
+                .then(res => res.json())
+                .then(data => {
+                    if (!isResolved && data && data.audioStreams) {
+                        const stream = data.audioStreams.find(s => String(s.itag) === '140') || data.audioStreams[0];
+                        if (stream && stream.url) {
+                            isResolved = true;
+                            clearTimeout(fallbackTimer);
+                            controllers.forEach(c => c.abort());
+                            resolve(stream.url);
+                        }
+                    }
+                })
+                .catch(() => {});
+        });
+    });
 }
 
 const tryNextStream = async (videoId) => {
@@ -214,14 +239,27 @@ const tryNextStream = async (videoId) => {
 };
 
 AUDIO.addEventListener('error', () => {
-    if (window.AUDIO_ENGINE !== 'native') return;
-    console.error("Stream failed. Waiting for user.");
-    updatePlayIcons('fa-solid fa-play');
-    window.OCTAVE.isPlaying = false;
+    if (activeEngine !== 'native') return;
+    
+    console.error("Audio stream failed. Retrying on new server...");
+    window.invIdx = (window.invIdx + 1) % window.INVIDIOUS.length;
+    window.pipedIdx = (window.pipedIdx + 1) % window.PIPED.length;
+    
+    if (window.OCTAVE.currentIndex >= 0) {
+        updatePlayIcons('fa-solid fa-spinner fa-spin');
+        const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
+        const fallbackUrl = `${window.INVIDIOUS[window.invIdx]}/latest_version?id=${track.videoId}&itag=140`;
+        
+        setTimeout(() => {
+            AUDIO.src = fallbackUrl;
+            AUDIO.load();
+            AUDIO.play().catch(() => {});
+        }, 1500); 
+    }
 });
 
 AUDIO.addEventListener('playing', () => {
-    if (window.AUDIO_ENGINE !== 'native') return;
+    if (activeEngine !== 'native') return;
     window.OCTAVE.isPlaying = true;
     updatePlayIcons('fa-solid fa-pause');
     startProgressTracking();
@@ -229,17 +267,22 @@ AUDIO.addEventListener('playing', () => {
 });
 
 AUDIO.addEventListener('pause', () => {
-    if (window.AUDIO_ENGINE !== 'native') return;
+    if (activeEngine !== 'native') return;
     window.OCTAVE.isPlaying = false;
-    updatePlayIcons('fa-solid fa-play');
+    const fpIcon = document.querySelector('#fp-play i');
+    if (fpIcon && !fpIcon.classList.contains('fa-spinner')) {
+        updatePlayIcons('fa-solid fa-play');
+    }
     clearInterval(progressTimer);
 });
 
 AUDIO.addEventListener('ended', () => {
-    if (window.AUDIO_ENGINE !== 'native') return;
+    if (activeEngine !== 'native') return;
     handleTrackEnded();
 });
 
+
+//  IFRAME ENGINE BRAVE UNTOUCHED 
 let YTP = null;
 let ytReady = false;
 
@@ -261,7 +304,7 @@ window.onYouTubeIframeAPIReady = () => {
             onReady: e => {
                 ytReady = true;
                 e.target.setVolume(100);
-                if (window.AUDIO_ENGINE === 'iframe' && window.OCTAVE.currentIndex >= 0 && window.OCTAVE.queue.length > 0) {
+                if (activeEngine === 'iframe' && window.OCTAVE.currentIndex >= 0 && window.OCTAVE.queue.length > 0) {
                     const track = window.OCTAVE.queue[window.OCTAVE.currentIndex];
                     YTP.cueVideoById({ videoId: track.videoId });
                 }
@@ -272,7 +315,7 @@ window.onYouTubeIframeAPIReady = () => {
 };
 
 function onYTS(e) {
-    if (window.AUDIO_ENGINE !== 'iframe') return;
+    if (activeEngine !== 'iframe') return;
     if (e.data === YT.PlayerState.PLAYING) {
         window.OCTAVE.isPlaying = true;
         updatePlayIcons('fa-solid fa-pause');
@@ -280,13 +323,17 @@ function onYTS(e) {
         syncMediaSessionPosition();
     } else if (e.data === YT.PlayerState.PAUSED) {
         window.OCTAVE.isPlaying = false;
-        updatePlayIcons('fa-solid fa-play');
+        const fpIcon = document.querySelector('#fp-play i');
+        if (fpIcon && !fpIcon.classList.contains('fa-spinner')) {
+            updatePlayIcons('fa-solid fa-play');
+        }
         clearInterval(progressTimer);
     } else if (e.data === YT.PlayerState.ENDED) {
         handleTrackEnded();
     }
 }
 
+//  HYBRID LOGIC & SHARED CONTROLS 
 let progressTimer = null;
 let sleepTimerId = null;
 
@@ -324,7 +371,7 @@ function updatePlayIcons(iconClass) {
 window.togglePlay = () => {
     if (window.OCTAVE.currentIndex === -1) return;
     
-    if (window.AUDIO_ENGINE === 'iframe') {
+    if (activeEngine === 'iframe') {
         if (!YTP) return;
         window.OCTAVE.isPlaying ? YTP.pauseVideo() : YTP.playVideo();
     } else {
@@ -340,10 +387,10 @@ function startProgressTracking() {
         let current = 0;
         let total = 0;
 
-        if (window.AUDIO_ENGINE === 'iframe' && YTP && typeof YTP.getCurrentTime === 'function') {
+        if (activeEngine === 'iframe' && YTP && typeof YTP.getCurrentTime === 'function') {
             current = YTP.getCurrentTime();
             total = YTP.getDuration();
-        } else if (window.AUDIO_ENGINE === 'native') {
+        } else if (activeEngine === 'native') {
             current = AUDIO.currentTime;
             total = AUDIO.duration;
         }
@@ -392,9 +439,9 @@ function updateMediaSession(track) {
 
     try {
         navigator.mediaSession.setActionHandler('seekto', (details) => {
-            if (window.AUDIO_ENGINE === 'iframe' && YTP && typeof YTP.seekTo === 'function') {
+            if (activeEngine === 'iframe' && YTP && typeof YTP.seekTo === 'function') {
                 YTP.seekTo(details.seekTime, true);
-            } else if (window.AUDIO_ENGINE === 'native' && AUDIO.duration) {
+            } else if (activeEngine === 'native' && AUDIO.duration) {
                 AUDIO.currentTime = details.seekTime;
             }
             syncMediaSessionPosition();
@@ -407,10 +454,10 @@ function syncMediaSessionPosition() {
     let duration = 0;
     let position = 0;
 
-    if (window.AUDIO_ENGINE === 'iframe' && YTP && typeof YTP.getDuration === 'function') {
+    if (activeEngine === 'iframe' && YTP && typeof YTP.getDuration === 'function') {
         duration = YTP.getDuration();
         position = YTP.getCurrentTime();
-    } else if (window.AUDIO_ENGINE === 'native') {
+    } else if (activeEngine === 'native') {
         duration = AUDIO.duration;
         position = AUDIO.currentTime;
     }
@@ -458,11 +505,19 @@ window.playTrackByIndex = (index) => {
     updateMediaSession(track);
 
     if (window.AUDIO_ENGINE === 'iframe') {
+        activeEngine = 'iframe';
+    } else {
+        activeEngine = 'native';
+    }
+
+    if (activeEngine === 'iframe') {
+        AUDIO.pause();
         if (ytReady && YTP) {
             YTP.loadVideoById({ videoId: track.videoId });
             YTP.playVideo();
         }
     } else {
+        if (YTP && typeof YTP.pauseVideo === 'function') YTP.pauseVideo();
         AUDIO.pause();
         tryNextStream(track.videoId); 
     }
@@ -482,15 +537,15 @@ window.playTrack = (track) => {
 
 window.playPrev = () => {
     let current = 0;
-    if (window.AUDIO_ENGINE === 'iframe' && YTP && typeof YTP.getCurrentTime === 'function') {
+    if (activeEngine === 'iframe' && YTP && typeof YTP.getCurrentTime === 'function') {
         current = YTP.getCurrentTime();
-    } else if (window.AUDIO_ENGINE === 'native') {
+    } else if (activeEngine === 'native') {
         current = AUDIO.currentTime;
     }
 
     if (current > 3) {
-        if (window.AUDIO_ENGINE === 'iframe' && YTP) YTP.seekTo(0);
-        else if (window.AUDIO_ENGINE === 'native') AUDIO.currentTime = 0;
+        if (activeEngine === 'iframe' && YTP) YTP.seekTo(0);
+        else if (activeEngine === 'native') AUDIO.currentTime = 0;
     } else if (window.OCTAVE.currentIndex > 0) {
         window.OCTAVE.isNextTrackManual = true;
         window.playTrackByIndex(window.OCTAVE.currentIndex - 1);
@@ -666,9 +721,9 @@ function seekToPosition(e, containerElement, isFinalSeek = true) {
     const percentage = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     
     let totalTime = 0;
-    if (window.AUDIO_ENGINE === 'iframe' && YTP && typeof YTP.getDuration === 'function') {
+    if (activeEngine === 'iframe' && YTP && typeof YTP.getDuration === 'function') {
         totalTime = YTP.getDuration();
-    } else if (window.AUDIO_ENGINE === 'native') {
+    } else if (activeEngine === 'native') {
         totalTime = AUDIO.duration;
     }
 
@@ -682,9 +737,9 @@ function seekToPosition(e, containerElement, isFinalSeek = true) {
         if (currTime) currTime.textContent = formatTime(totalTime * percentage);
 
         if (isFinalSeek) {
-            if (window.AUDIO_ENGINE === 'iframe' && YTP && typeof YTP.seekTo === 'function') {
+            if (activeEngine === 'iframe' && YTP && typeof YTP.seekTo === 'function') {
                 YTP.seekTo(totalTime * percentage, true);
-            } else if (window.AUDIO_ENGINE === 'native') {
+            } else if (activeEngine === 'native') {
                 AUDIO.currentTime = totalTime * percentage;
             }
             syncMediaSessionPosition();
