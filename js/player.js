@@ -1,6 +1,6 @@
 // ============================================================
 // player.js Octave Hybrid Audio Engine
-// Restored Baseline with Notification Timeline Fix
+// Background Playback Active + Ghost Timeline Fix
 // ============================================================
 
 window.escapeHTML = (str) => {
@@ -398,13 +398,6 @@ function updateMediaSession(track) {
         ]
     });
 
-    // Wipe the previous track's timeline from the notification panel instantly
-    try {
-        if ('setPositionState' in navigator.mediaSession) {
-            navigator.mediaSession.setPositionState(null);
-        }
-    } catch (e) {}
-
     navigator.mediaSession.setActionHandler('play', () => { window.togglePlay(); });
     navigator.mediaSession.setActionHandler('pause', () => { window.togglePlay(); });
     navigator.mediaSession.setActionHandler('nexttrack', () => { window.playNextLogic(); });
@@ -456,7 +449,26 @@ window.playTrackByIndex = (index) => {
     window.OCTAVE.nextTrackPreloaded = false;
     setTimeout(() => { window.OCTAVE.isTransitioning = false; }, 4000); 
 
+    // ---> KILL GHOST INTERVAL AND WIPE TIMELINE INSTANTLY <---
+    clearInterval(progressTimer);
+    window.OCTAVE.isPlaying = false;
+    try {
+        if ('mediaSession' in navigator && navigator.mediaSession.setPositionState) {
+            navigator.mediaSession.setPositionState(null);
+        }
+    } catch (e) {}
+
     updatePlayIcons('fa-solid fa-spinner fa-spin'); 
+    
+    // Instantly reset the DOM progress UI so nothing lingers visually 
+    const miniProg = document.getElementById('mini-progress');
+    const fpProg = document.getElementById('fp-progress-fill');
+    const currTime = document.getElementById('fp-time-current');
+    const totTime = document.getElementById('fp-time-total');
+    if (miniProg) miniProg.style.width = '0%';
+    if (fpProg) fpProg.style.width = '0%';
+    if (currTime) currTime.textContent = "0:00";
+    if (totTime) totTime.textContent = "0:00";
     
     const hour = new Date().getHours();
     let tod = 'night';
@@ -482,27 +494,14 @@ window.playTrackByIndex = (index) => {
     window.OCTAVE.recentPlayed =[track, ...window.OCTAVE.recentPlayed.filter(t => t.videoId !== track.videoId)];
     window.saveCache();
 
-    // Instantly reset the DOM progress UI so nothing lingers visually 
-    const miniProg = document.getElementById('mini-progress');
-    const fpProg = document.getElementById('fp-progress-fill');
-    const currTime = document.getElementById('fp-time-current');
-    const totTime = document.getElementById('fp-time-total');
-    if (miniProg) miniProg.style.width = '0%';
-    if (fpProg) fpProg.style.width = '0%';
-    if (currTime) currTime.textContent = "0:00";
-    if (totTime) totTime.textContent = "0:00";
-
     updatePlayerUI(track);
     updateMediaSession(track);
 
-    // FIX: Lock engine strictly to its default assignment. Do not swap mid-session in background.
     activeEngine = window.AUDIO_ENGINE; 
 
     if (activeEngine === 'iframe') {
         AUDIO.pause();
         
-        // Background Pre-Auth Lock: Fires a silent micro-buffer to keep the OS media session
-        // awake while Brave is in the background, allowing the IFrame to successfully load the next track.
         const SILENT_MP3 = "data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU5LjI3LjEwMAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIAD+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+AAAAAExhdmM1OS4yNyAAAAAAAAAAAAAAAAQAAgPIAAAAAAAAAAABIQQAAAAAAAAAAAAAAAAAAAAAA//MUZAAAAAGkAAAAAAAAA0gAAAAATEFNRTMuMTAwA8gAAAAAAgAAAEH//MUZBAAAAGkAAAAAAAAA0gAAAAAA//MUZCQAAAGkAAAAAAAAA0gAAAAAA//MUZGQAAAGkAAAAAAAAA0gAAAAAA";
         AUDIO.src = SILENT_MP3;
         AUDIO.play().then(() => {
