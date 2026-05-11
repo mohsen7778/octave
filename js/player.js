@@ -1,6 +1,6 @@
 // ============================================================
 // player.js Octave Hybrid Audio Engine
-// Restored Baseline with Strict IFrame Background Fix
+// Restored Baseline with Notification Timeline Fix
 // ============================================================
 
 window.escapeHTML = (str) => {
@@ -398,6 +398,13 @@ function updateMediaSession(track) {
         ]
     });
 
+    // Wipe the previous track's timeline from the notification panel instantly
+    try {
+        if ('setPositionState' in navigator.mediaSession) {
+            navigator.mediaSession.setPositionState(null);
+        }
+    } catch (e) {}
+
     navigator.mediaSession.setActionHandler('play', () => { window.togglePlay(); });
     navigator.mediaSession.setActionHandler('pause', () => { window.togglePlay(); });
     navigator.mediaSession.setActionHandler('nexttrack', () => { window.playNextLogic(); });
@@ -474,6 +481,16 @@ window.playTrackByIndex = (index) => {
     
     window.OCTAVE.recentPlayed =[track, ...window.OCTAVE.recentPlayed.filter(t => t.videoId !== track.videoId)];
     window.saveCache();
+
+    // Instantly reset the DOM progress UI so nothing lingers visually 
+    const miniProg = document.getElementById('mini-progress');
+    const fpProg = document.getElementById('fp-progress-fill');
+    const currTime = document.getElementById('fp-time-current');
+    const totTime = document.getElementById('fp-time-total');
+    if (miniProg) miniProg.style.width = '0%';
+    if (fpProg) fpProg.style.width = '0%';
+    if (currTime) currTime.textContent = "0:00";
+    if (totTime) totTime.textContent = "0:00";
 
     updatePlayerUI(track);
     updateMediaSession(track);
